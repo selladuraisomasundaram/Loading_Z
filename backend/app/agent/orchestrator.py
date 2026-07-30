@@ -98,260 +98,61 @@ def fallback_parse_intent(message: str) -> Dict[str, Any]:
     return {"tool": "conversational", "argument": ""}
 
 async def orchestrate_message(message: str) -> Dict[str, Any]:
-    client = get_ollama_client()
-    model_name = os.getenv("GEMMA_MODEL", GEMMA_MODEL)
+    from app.rag.nlp_processor import process_nlp_query
+    from app.rag.pipeline import execute_rag_pipeline
     
-    # 1. Parse user intent (try Gemma, fallback to rule-based)
     tool_activity: List[Dict[str, str]] = []
-    tool = "conversational"
-    argument = ""
     
-    try:
-        gemma_timeout = float(os.getenv("GEMMA_TIMEOUT_SECONDS", "60.0"))
-        response = await asyncio.wait_for(
-            client.chat(
-                model=model_name,
-                messages=[{
-                    "role": "user",
-                    "content": f"{INTENT_SYSTEM_INSTRUCTION}\nUser message: {message}"
-                }],
-                format="json"
-            ),
-            timeout=gemma_timeout
-        )
-
-        content = response.get("message", {}).get("content", "")
-        parsed = json.loads(content)
-        tool = str(parsed.get("tool", "conversational")).strip()
-        argument = str(parsed.get("argument", "")).strip()
-    except Exception as e:
-        print(f"Orchestrator intent parsing fallback triggered: {e}")
-        fallback = fallback_parse_intent(message)
-        tool = fallback["tool"]
-        argument = fallback["argument"]
-        
-    # Standardize tool logging
-    tool_activity.append({
-        "step": "Gemma Tool Selection",
-        "action": f"{tool}('{argument}')" if tool != "conversational" else "conversational",
-        "result": f"{tool}('{argument}')" if tool != "conversational" else "conversational"
-    })
+    # 1. NLP Query Processor (Phase 5)
+    tool_activity.append({"step": "NLP Processing", "action": "Analyzing intent & extracting entities"})
+    nlp_result = process_nlp_query(message)
+    intent = nlp_result["intent"]
+    entities = nlp_result["entities"]
     
-    response_text = ""
+    tool_activity.append({"step": "Intent Detected", "action": f"Classified as {intent}", "result": str(entities)})
+    
+    # 2. LangChain RAG & Gemma reasoning
+    # Send through RAG pipeline to get DB context and Gemma response
+    tool_activity.append({"step": "RAG Retrieval", "action": "Querying FAISS for product knowledge"})
+    rag_response = execute_rag_pipeline(message)
+    
+    response_text = rag_response.get("response", "I could not generate a response.")
+    tool_activity.append({"step": "Gemma Generation", "action": "Synthesized grounded response"})
+    
     target_aisle: Optional[str] = None
     route: Optional[Dict[str, Any]] = None
     
-    # 2. Execute selected tool
-    if tool == "search_web":
-        search_query = argument if argument else message
-        # Narrow down the web search to grocery/recipe domain to reduce irrelevant results (like dating apps)
-        if not any(w in search_query.lower() for w in ("grocery", "food", "recipe", "retail")):
-            search_query += " food recipe grocery"
-        web_results = search_web(search_query)
-        snippet_preview = web_results[:140] + "..." if len(web_results) > 140 else web_results
-        tool_activity.append({
-            "step": "DuckDuckGo Web Search",
-            "action": f"search_web('{search_query}')",
-            "result": snippet_preview
-        })
-
-        try:
-            prompt = (
-                f"You are a helpful supermarket smart trolley assistant.\n"
-                f"User query: {message}\n"
-                f"Web Search Results:\n{web_results}\n\n"
-                f"Synthesize a clear, accurate, and concise natural language answer based on the web search results above."
-            )
-            resp = await client.chat(model=model_name, messages=[{"role": "user", "content": prompt}])
-            response_text = resp.get("message", {}).get("content", "").strip()
-        except Exception:
-            response_text = f"Here is what I found online regarding '{search_query}':\n\n{web_results}"
-
-    elif tool == "query_database_nl":
-        try:
-            schema_prompt = (
-                "You are an expert SQLite database developer.\n"
-                "Given the following table schema:\n"
-                "Table 'products': id (TEXT), product_name (TEXT), brand (TEXT), category (TEXT), sub_category (TEXT), sale_price (FLOAT), market_price (FLOAT), stock (INTEGER), aisle (TEXT), shelf (TEXT)\n"
-                f"User Request: {argument if argument else message}\n\n"
-                "Output ONLY a valid SQLite SELECT query. Do not include any formatting, markdown, or explanation."
-            )
-            sql_resp = await client.chat(model=model_name, messages=[{"role": "user", "content": schema_prompt}])
-            sql_query = sql_resp.get("message", {}).get("content", "").strip()
-            # Clean up markdown if model outputs it
-            if sql_query.startswith("```sql"): sql_query = sql_query[6:]
-            elif sql_query.startswith("```"): sql_query = sql_query[3:]
-            if sql_query.endswith("```"): sql_query = sql_query[:-3]
-            sql_query = sql_query.strip()
-            
-            tool_activity.append({
-                "step": "Gemma Text-to-SQL",
-                "action": "Generated SQL query",
-                "result": sql_query
-            })
-            
-            # Execute SQL safely (read-only SQLite query)
-            from app.core.database import engine
-            from sqlalchemy import text
-            results = []
-            with engine.connect() as conn:
-                result = conn.execute(text(sql_query))
-                results = [dict(row._mapping) for row in result.fetchmany(10)]
-                
-            tool_activity.append({
-                "step": "Database SQL Search",
-                "action": "Executed SQL",
-                "result": f"Returned {len(results)} rows"
-            })
-            
-            # Synthesize response
-            prompt = (
-                f"You are a helpful supermarket smart trolley assistant.\n"
-                f"User asked: {message}\n"
-                f"Database Results: {json.dumps(results)}\n\n"
-                f"Synthesize a clear, accurate, and concise natural language answer based on the database results. "
-                f"If there are multiple products, use a Markdown bulleted list. Do not mention the SQL query."
-            )
-            resp = await client.chat(model=model_name, messages=[{"role": "user", "content": prompt}])
-            response_text = resp.get("message", {}).get("content", "").strip()
-            
-        except Exception as e:
-            print(f"query_database_nl error: {e}", flush=True)
-            tool_activity.append({
-                "step": "Database SQL Search",
-                "action": "Error executing query",
-                "result": str(e)
-            })
-            response_text = "I encountered an error while searching the database for your request."
-
-    elif tool == "search_catalog":
-        prod_data = search_catalog(argument)
-        if prod_data.get("success") and prod_data.get("verified"):
-            price_str = f"₹{prod_data['price']}"
-            aisle_info = prod_data["aisle"]
-            tool_activity.append({
-                "step": "Database Query",
-                "action": f"{aisle_info}, Price {price_str}",
-                "result": f"{aisle_info}, Price {price_str}"
-            })
-            
-            # Auto-calculate route to the product's aisle
-            canonical_aisle = map_to_spatial_node(aisle_info)
-            route_data = get_route(canonical_aisle)
-            if route_data.get("success"):
-                route = route_data
-                target_aisle = canonical_aisle
-                tool_activity.append({
-                    "step": "Pathfinder Execution",
-                    "action": f"Route ENTRANCE -> {canonical_aisle} calculated",
-                    "result": f"Route ENTRANCE -> {canonical_aisle} calculated"
-                })
-                
-            # Formulate response
-            try:
-                prompt = (
-                    f"{RESPONSE_SYSTEM_INSTRUCTION}\n"
-                    f"Product details: {json.dumps(prod_data)}\n"
-                    f"Navigation: Route ENTRANCE -> {canonical_aisle} (Distance: {route['distance_meters']:.1f}m)"
-                )
-                resp = await client.chat(model=model_name, messages=[{"role": "user", "content": prompt}])
-                response_text = resp.get("message", {}).get("content", "").strip()
-            except Exception:
-                response_text = (
-                    f"{prod_data['product_name']} ({prod_data['brand']}) is located in {prod_data['aisle']}, {prod_data['shelf']}. "
-                    f"Price: {price_str}, Stock: {prod_data['stock']} units. I've highlighted the route on your map."
-                )
-        else:
-            tool_activity.append({
-                "step": "Database Query",
-                "action": "Product not found",
-                "result": "Product not found"
-            })
-            response_text = f"I couldn't find any products matching '{argument}' in our store catalog."
-            
-    elif tool == "get_route":
-        canonical_dest = map_to_spatial_node(argument)
-        route_data = get_route(canonical_dest)
-        if route_data.get("success"):
-            route = route_data
-            target_aisle = canonical_dest
-            tool_activity.append({
-                "step": "Pathfinder Execution",
-                "action": f"Route ENTRANCE -> {canonical_dest} calculated",
-                "result": f"Route ENTRANCE -> {canonical_dest} calculated"
-            })
-            
-            try:
-                prompt = (
-                    f"{RESPONSE_SYSTEM_INSTRUCTION}\n"
-                    f"Route details: Start ENTRANCE, Destination {canonical_dest}, "
-                    f"Waypoints {route['waypoints']}, Distance {route['distance_meters']:.1f}m"
-                )
-                resp = await client.chat(model=model_name, messages=[{"role": "user", "content": prompt}])
-                response_text = resp.get("message", {}).get("content", "").strip()
-            except Exception:
-                response_text = (
-                    f"The route to {canonical_dest} is calculated. "
-                    f"Waypoints: {' -> '.join(route['waypoints'])} (Distance: {route['distance_meters']:.1f} meters)."
-                )
-        else:
-            tool_activity.append({
-                "step": "Pathfinder Execution",
-                "action": "Route calculation failed",
-                "result": "Route calculation failed"
-            })
-            response_text = f"I'm sorry, I was unable to calculate a route to '{argument}'."
-            
-    elif tool == "check_inventory":
-        prod_data = check_inventory(argument)
-        if prod_data.get("success") and prod_data.get("verified"):
-            stock_qty = prod_data["stock"]
-            price_str = f"₹{prod_data['price']}"
-            tool_activity.append({
-                "step": "Database Query",
-                "action": f"SKU {argument} has stock {stock_qty}, price {price_str}",
-                "result": f"SKU {argument} has stock {stock_qty}, price {price_str}"
-            })
-            
-            canonical_aisle = map_to_spatial_node(prod_data["aisle"])
-            route_data = get_route(canonical_aisle)
-            if route_data.get("success"):
-                route = route_data
-                target_aisle = canonical_aisle
-                tool_activity.append({
-                    "step": "Pathfinder Execution",
-                    "action": f"Route ENTRANCE -> {canonical_aisle} calculated",
-                    "result": f"Route ENTRANCE -> {canonical_aisle} calculated"
-                })
-                
-            try:
-                prompt = (
-                    f"{RESPONSE_SYSTEM_INSTRUCTION}\n"
-                    f"Inventory details: Product {prod_data['product_name']}, SKU {prod_data['sku']}, "
-                    f"Price {price_str}, Stock {stock_qty}, Aisle {prod_data['aisle']}"
-                )
-                resp = await client.chat(model=model_name, messages=[{"role": "user", "content": prompt}])
-                response_text = resp.get("message", {}).get("content", "").strip()
-            except Exception:
-                response_text = (
-                    f"{prod_data['product_name']} (SKU: {prod_data['sku']}) is in stock with {stock_qty} units available. "
-                    f"Price: {price_str}. It is located in {prod_data['aisle']}."
-                )
-        else:
-            tool_activity.append({
-                "step": "Database Query",
-                "action": f"SKU {argument} not found",
-                "result": f"SKU {argument} not found"
-            })
-            response_text = f"I couldn't find any catalog matches for SKU '{argument}'."
-            
-    else: # conversational
-        try:
-            resp = await client.chat(model=model_name, messages=[{"role": "user", "content": message}])
-            response_text = resp.get("message", {}).get("content", "").strip()
-        except Exception:
-            response_text = "Hello! I am your Smart Trolley Assistant. How can I help you find items or navigate the store today?"
-
+    # 3. Handle specific action execution (Navigation, Cart) based on RAG output or NLP intent
+    product_name = rag_response.get("product_name") or entities.get("product_name")
+    
+    if rag_response.get("navigation_required") or intent == "NAVIGATION" or intent == "PRODUCT_LOCATION":
+        if product_name or entities.get("navigation_request"):
+            dest_query = product_name or entities.get("navigation_request")
+            # Try to resolve to aisle. RAG pipeline context usually provides the exact aisle.
+            # If we don't have it explicitly, we can attempt a catalog search to find the aisle.
+            prod_data = search_catalog(dest_query)
+            if prod_data.get("success"):
+                aisle = prod_data["aisle"]
+                canonical_dest = map_to_spatial_node(aisle)
+                route_data = get_route(canonical_dest)
+                if route_data.get("success"):
+                    route = route_data
+                    target_aisle = canonical_dest
+                    tool_activity.append({
+                        "step": "Pathfinder Execution",
+                        "action": f"Route ENTRANCE -> {canonical_dest} calculated",
+                        "result": f"Route calculated"
+                    })
+    
+    if rag_response.get("cart_action") == "add" or intent == "ADD_TO_CART":
+        # Simulate cart addition
+        tool_activity.append({"step": "Cart Update", "action": f"Added {product_name} to cart"})
+        response_text += f"\n\n[Action: Added {product_name} to cart]"
+        
+    if rag_response.get("cart_action") == "remove" or intent == "REMOVE_FROM_CART":
+        tool_activity.append({"step": "Cart Update", "action": f"Removed {product_name} from cart"})
+        response_text += f"\n\n[Action: Removed {product_name} from cart]"
+    
     # Build response dictionary combining snake_case and camelCase parameters for frontend compatibility
     timestamp_str = "12:00:00 PM"
     return {

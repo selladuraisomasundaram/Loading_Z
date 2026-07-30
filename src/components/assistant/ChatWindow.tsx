@@ -138,18 +138,25 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all shadow-sm ${
             isMicActive
               ? "bg-rose-500 text-white animate-pulse shadow-rose-500/20"
+              : isProcessing
+              ? "bg-amber-500 text-white animate-pulse shadow-amber-500/20"
               : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
           }`}
         >
           {isMicActive ? (
             <>
-              <Mic className="w-3.5 h-3.5" />
+              <span className="text-sm">🔴</span>
               <span>Listening...</span>
+            </>
+          ) : isProcessing ? (
+            <>
+              <span className="text-sm">◌</span>
+              <span>Thinking...</span>
             </>
           ) : (
             <>
-              <MicOff className="w-3.5 h-3.5 text-slate-400" />
-              <span>Mic Muted</span>
+              <span className="text-sm">🎙</span>
+              <span>Ask Assistant</span>
             </>
           )}
         </button>
@@ -225,7 +232,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
         {isProcessing && (
           <div className="flex items-center space-x-2 text-xs text-purple-400 bg-purple-500/10 border border-purple-500/20 p-2.5 rounded-xl w-fit animate-pulse">
             <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
-            <span>Gemma AI is reasoning & querying catalog...</span>
+            <span>🔎 Finding product and reasoning...</span>
           </div>
         )}
         <div ref={messagesEndRef} />
