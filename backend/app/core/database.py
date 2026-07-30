@@ -42,6 +42,14 @@ class DatabaseEngine:
             df['normalized_brand'] = df['brand'].fillna('').astype(str).apply(self._normalize_str)
             df['search_text'] = df['normalized_brand'] + ' ' + df['normalized_name']
 
+            # Precompute SKUs for all products
+            skus = []
+            for idx, row in df.iterrows():
+                prod_name = str(row['product']) if pd.notna(row.get('product')) else "Unknown Product"
+                brand_name = str(row['brand']).strip() if pd.notna(row.get('brand')) else "Generic"
+                skus.append(self._generate_sku(prod_name, brand_name, idx))
+            df['sku'] = skus
+
             self.df = df
             print(f"Database loaded successfully with {len(self.df)} products from {csv_path}.")
         except Exception as e:
@@ -112,6 +120,20 @@ class DatabaseEngine:
         norm_query = self._normalize_str(query_name)
         if not norm_query:
             return self._get_fallback_product(query_name)
+
+        # 0. Check if query matches SKU format and resolve
+        query_cleaned = query_name.strip().upper()
+        if not query_cleaned.startswith("SKU-"):
+            if len(query_cleaned) == 6 and all(c in "0123456789ABCDEF" for c in query_cleaned):
+                query_cleaned = f"SKU-{query_cleaned}"
+            elif query_cleaned.startswith("SKU") and len(query_cleaned) == 9:
+                query_cleaned = f"SKU-{query_cleaned[3:]}"
+
+        if query_cleaned.startswith("SKU-") and 'sku' in self.df.columns:
+            sku_matches = self.df[self.df['sku'] == query_cleaned]
+            if not sku_matches.empty:
+                idx = sku_matches.index[0]
+                return self._row_to_product(sku_matches.iloc[0], idx)
 
         # 1. Exact normalized name match
         exact_matches = self.df[self.df['normalized_name'] == norm_query]
