@@ -373,7 +373,7 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
       tax: 0,
       total: 0,
       recommendations: [],
-    });
+    }));
     get().updateLoadCellWeight(0, false);
   },
 
