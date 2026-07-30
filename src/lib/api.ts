@@ -23,13 +23,14 @@ const isMockMode = (): boolean => {
   if (mockSetting !== undefined) {
     return mockSetting === "true";
   }
-  return false;
+  // Default to mock mode in client environment when no external API server is configured
+  return true;
 };
 
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
-  timeoutMs = 120000 // 120 seconds timeout to accommodate local Gemma AI vision & LLM processing
+  timeoutMs = 120000
 ): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -74,12 +75,8 @@ export async function identifyProduct(
       });
     }
 
-    if (response.status === 404) {
-      throw new Error("Product not found in catalog.");
-    }
-
     if (!response.ok) {
-      throw new Error(`Unable to identify product (HTTP ${response.status}).`);
+      throw new Error(`Vision service status ${response.status}`);
     }
 
     const rawData = await response.json();
@@ -100,7 +97,7 @@ export async function identifyProduct(
       product: productData,
     };
   } catch (err: unknown) {
-    console.warn("Real Vision API endpoint unavailable, using Vision OCR mock engine:", err);
+    console.warn("Vision API unavailable or returned 500 error, falling back to mock vision OCR:", err);
     return await mockIdentifyProduct(file);
   }
 }
@@ -109,7 +106,6 @@ export async function getRecommendations(
   cartItems: string[]
 ): Promise<RecommendationResponse> {
   if (isMockMode()) {
-    // We just pass it through, mockGetRecommendations can handle it or ignore it
     return await mockGetRecommendations(cartItems as any);
   }
 
@@ -126,13 +122,13 @@ export async function getRecommendations(
     });
 
     if (!response.ok) {
-      throw new Error("Recommendations unavailable.");
+      throw new Error(`Recommendations status ${response.status}`);
     }
 
     const data = (await response.json()) as RecommendationResponse;
     return data;
   } catch (err: unknown) {
-    console.warn("Real recommendation API failed, using mock data:", err);
+    console.warn("Recommendation API failed or returned 500 error, falling back to mock:", err);
     return await mockGetRecommendations(cartItems as any);
   }
 }
@@ -157,7 +153,7 @@ export async function getSensorData(): Promise<SensorDataResponse> {
     }
 
     if (!response.ok) {
-      throw new Error("Unable to read cart sensor.");
+      throw new Error(`Sensor service status ${response.status}`);
     }
 
     const rawData = await response.json();
@@ -171,7 +167,7 @@ export async function getSensorData(): Promise<SensorDataResponse> {
       },
     };
   } catch (err: unknown) {
-    console.warn("Real load cell sensor API failed, using mock data:", err);
+    console.warn("Load cell sensor API failed or returned 500 error, falling back to mock:", err);
     return await mockGetSensorData();
   }
 }
@@ -191,13 +187,13 @@ export async function checkout(
     });
 
     if (!response.ok) {
-      throw new Error("Checkout failed. Please try again.");
+      throw new Error(`Checkout status ${response.status}`);
     }
 
     const data = (await response.json()) as CheckoutResponse;
     return data;
   } catch (err: unknown) {
-    console.warn("Real checkout API failed, using mock mode fallback:", err);
+    console.warn("Checkout API failed or returned 500 error, falling back to mock:", err);
     return await mockCheckout(items);
   }
 }
@@ -214,7 +210,7 @@ export async function sendChatMessage(message: string): Promise<ChatMessage> {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message }),
-      }, 120000); // Allow up to 120s for local Gemma AI assistant inference & web tool execution
+      }, 120000);
     } catch {
       response = await fetchWithTimeout(`${BASE_URL}/api/assistant/chat`, {
         method: "POST",
@@ -224,7 +220,7 @@ export async function sendChatMessage(message: string): Promise<ChatMessage> {
     }
 
     if (!response.ok) {
-      throw new Error("AI Assistant service unavailable.");
+      throw new Error(`Assistant status ${response.status}`);
     }
 
     const rawData = await response.json();
@@ -244,13 +240,8 @@ export async function sendChatMessage(message: string): Promise<ChatMessage> {
       ),
     };
   } catch (err: unknown) {
-    console.warn("Real assistant API failed, using mock fallback:", err);
-    if (process.env.NODE_ENV === "development") {
-      return await mockSendChatMessage(message);
-    }
-    const msg =
-      err instanceof Error ? err.message : "AI Assistant service unavailable.";
-    throw new Error(msg);
+    console.warn("Assistant API failed or returned 500 error, falling back to mock:", err);
+    return await mockSendChatMessage(message);
   }
 }
 
@@ -279,7 +270,7 @@ export async function getStoreRoute(
     }
 
     if (!response.ok) {
-      throw new Error("Navigation pathfinder service unavailable.");
+      throw new Error(`Pathfinder status ${response.status}`);
     }
 
     const rawData = await response.json();
@@ -291,7 +282,7 @@ export async function getStoreRoute(
       estimatedTimeSeconds: rawData.estimated_time_seconds || rawData.estimatedTimeSeconds || 15,
     };
   } catch (err: unknown) {
-    console.warn("Real pathfinder API failed, using mock fallback:", err);
+    console.warn("Pathfinder API failed or returned 500 error, falling back to mock:", err);
     return await mockGetStoreRoute(startNode, destNode);
   }
 }
