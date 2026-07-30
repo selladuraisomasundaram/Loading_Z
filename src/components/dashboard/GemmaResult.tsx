@@ -22,6 +22,7 @@ export const GemmaResult: React.FC = () => {
     detectionStatus,
     uploadedImage,
     addGemmaResultToCart,
+    addItem,
     fileError,
   } = useCart();
 
@@ -210,7 +211,7 @@ export const GemmaResult: React.FC = () => {
   <div className="mt-4">
     <h4 className="text-sm font-semibold text-slate-800 mb-2">Recommended Products</h4>
     <div className="flex overflow-x-auto gap-3 pb-2">
-      {gemmaResult.recommendations.map((rec, idx) => (
+      {gemmaResult.recommendations.map((rec: { product_id?: string; product_name: string; price: number; image_url?: string }, idx: number) => (
         <div
           key={rec.product_id ?? idx}
           className="min-w-[150px] bg-white border border-slate-200 rounded-xl p-3 shadow-sm"
@@ -222,15 +223,15 @@ export const GemmaResult: React.FC = () => {
           <p className="text-xs text-amber-600">{formatCurrency(rec.price)}</p>
           <button
             onClick={() => {
-              const { addItem } = useCart();
               addItem({
-                id: rec.product_id,
+                id: rec.product_id || `rec-${idx}`,
                 name: rec.product_name,
                 price: rec.price,
-                quantity: 1,
+                weightGrams: 100,
+                category: "Recommended",
               });
             }}
-            className="mt-1 w-full text-xs bg-sky-600 hover:bg-sky-500 text-white py-1 rounded"
+            className="mt-1 w-full text-xs bg-sky-600 hover:bg-sky-500 text-white py-1 rounded font-bold"
           >
             Add to Cart
           </button>

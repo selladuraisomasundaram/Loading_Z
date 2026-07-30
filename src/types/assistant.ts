@@ -1,6 +1,7 @@
 export interface ToolStep {
   step: string;
   action: string;
+  result?: string;
 }
 
 export interface WebSearchPayload {

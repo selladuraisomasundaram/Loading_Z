@@ -37,6 +37,13 @@ export interface CartItemType {
   addedAt: string;
 }
 
+export interface GemmaRecommendationItem {
+  product_id?: string;
+  product_name: string;
+  price: number;
+  reason?: string;
+}
+
 export interface GemmaDetectionResult {
   product_id: string;
   product_name: string;
@@ -49,6 +56,7 @@ export interface GemmaDetectionResult {
   estimatedWeightGrams: number;
   imageUrl?: string;
   detectedAt: string;
+  recommendations?: GemmaRecommendationItem[];
 }
 
 export interface LoadCellTelemetryData {

@@ -15,7 +15,6 @@ import {
 import { useCart } from "@/hooks/useCart";
 import { ChatMessage } from "@/types";
 import { sendChatMessage } from "@/lib/api";
-import ReactMarkdown from "react-markdown";
 
 export interface ChatWindowProps {
   onSelectMessage?: (msg: ChatMessage) => void;
@@ -113,7 +112,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
     }
   };
 
-  const handleShowOnMap = (aisle: string) => {
+  const handleShowOnMap = (_aisle: string) => {
     setActiveTab("map");
   };
 
@@ -181,11 +180,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
                     : "bg-sky-600 text-white font-medium shadow-md"
                 }`}
               >
-                {isBot ? (
-                  <ReactMarkdown>{msg.text}</ReactMarkdown>
-                ) : (
-                  <p className="leading-relaxed">{msg.text}</p>
-                )}
+                <p className="leading-relaxed whitespace-pre-line">{msg.text}</p>
 
                 {/* Web Research Indicator Badge */}
                 {isBot && msg.webSearchUsed && (

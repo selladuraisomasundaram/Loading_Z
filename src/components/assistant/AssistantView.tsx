@@ -5,7 +5,7 @@ import ChatWindow from "./ChatWindow";
 import { ChatMessage } from "@/types";
 
 export const AssistantView: React.FC = () => {
-  const [selectedMessage, setSelectedMessage] = useState<ChatMessage | null>(
+  const [_selectedMessage, setSelectedMessage] = useState<ChatMessage | null>(
     null
   );
 
