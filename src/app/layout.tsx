@@ -5,9 +5,9 @@ export const metadata: Metadata = {
   title: "Smart Trolley OS - Agaram Acolytes",
   description: "Light human-designed Smart Trolley application dashboard for Team Agaram Acolytes",
   icons: {
-    icon: "/icon.svg",
-    shortcut: "/icon.svg",
-    apple: "/icon.svg",
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
   },
 };
 
