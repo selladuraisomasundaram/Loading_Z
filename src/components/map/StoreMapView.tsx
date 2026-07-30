@@ -2,18 +2,19 @@
 
 import React, { useEffect, useState } from "react";
 import { Navigation, Compass, MapPin, Play, Square, Loader2 } from "lucide-react";
-import StoreGrid from "./StoreGrid";
+import SupermarketMap from "@/components/navigation/SupermarketMap";
+import { AisleData } from "@/components/navigation/storeMapData";
 import { RouteData } from "@/types";
 import { getStoreRoute } from "@/lib/api";
 
 export const StoreMapView: React.FC = () => {
   const [currentLocation, setCurrentLocation] = useState("ENTRANCE");
-  const [targetLocation, setTargetLocation] = useState("AISLE 2");
+  const [selectedAisle, setSelectedAisle] = useState<AisleData | null>(null);
+  const [targetLocation, setTargetLocation] = useState("A3");
   const [isNavigating, setIsNavigating] = useState(false);
   const [routeData, setRouteData] = useState<RouteData | null>(null);
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
 
-  // Fetch pathfinder route data whenever target location changes
   useEffect(() => {
     let isMounted = true;
 
@@ -38,8 +39,9 @@ export const StoreMapView: React.FC = () => {
     };
   }, [currentLocation, targetLocation]);
 
-  const handleSelectAisle = (aisleId: string) => {
-    setTargetLocation(aisleId);
+  const handleAisleSelect = (aisle: AisleData) => {
+    setSelectedAisle(aisle);
+    setTargetLocation(aisle.id);
   };
 
   const toggleNavigation = () => {
@@ -47,19 +49,16 @@ export const StoreMapView: React.FC = () => {
       setIsNavigating(true);
     } else {
       setIsNavigating(false);
-      // Simulate arriving at target
       setCurrentLocation(targetLocation);
     }
   };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      {/* 2D Interactive Store Grid */}
-      <StoreGrid
-        currentLocation={currentLocation}
-        targetLocation={targetLocation}
-        onSelectAisle={handleSelectAisle}
-        isNavigating={isNavigating}
+      {/* PHASE 1 STATIC INDOOR SUPERMARKET SVG MAP COMPONENT */}
+      <SupermarketMap
+        initialSelectedAisleId={targetLocation}
+        onAisleSelect={handleAisleSelect}
       />
 
       {/* ROUTE INFO CARD & NAVIGATION CONTROLS */}
@@ -71,12 +70,12 @@ export const StoreMapView: React.FC = () => {
             </div>
             <div>
               <h3 className="font-extrabold text-slate-900 text-base">
-                Pathfinder Route Summary
+                Pathfinder Navigation Guidance
               </h3>
               <p className="text-xs text-slate-500">
-                {routeData?.targetProductName
-                  ? `Navigating to: ${routeData.targetProductName}`
-                  : `Target Destination: ${targetLocation}`}
+                {selectedAisle
+                  ? `Navigating to: Aisle ${selectedAisle.id} (${selectedAisle.category})`
+                  : `Target Location: Aisle ${targetLocation}`}
               </p>
             </div>
           </div>
@@ -105,7 +104,7 @@ export const StoreMapView: React.FC = () => {
               Target Location
             </span>
             <span className="font-black text-amber-600 font-mono text-sm block mt-0.5">
-              {targetLocation}
+              Aisle {targetLocation}
             </span>
           </div>
 
@@ -138,7 +137,7 @@ export const StoreMapView: React.FC = () => {
           </div>
         </div>
 
-        {/* Action Toggle Button: [ START NAVIGATION ] / [ STOP ] */}
+        {/* Action Toggle Button */}
         <div className="pt-2 flex items-center justify-between gap-4">
           <button
             type="button"
