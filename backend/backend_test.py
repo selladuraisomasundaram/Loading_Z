@@ -157,8 +157,8 @@ def run_tests():
     except Exception as e:
         safe_print(f"  => FAILED: {e}\n")
 
-    # 3. POST /api/v1/assistant/chat
-    safe_print("[Test 4/6] POST /api/v1/assistant/chat")
+    # 3. POST /api/v1/assistant/chat (Catalog Search)
+    safe_print("[Test 4/8] POST /api/v1/assistant/chat (Catalog Search)")
     payload = {"message": "Where is Amul Butter?"}
     try:
         t0 = time.time()
@@ -183,8 +183,34 @@ def run_tests():
     except Exception as e:
         safe_print(f"  => FAILED: {e}\n")
 
+    # 3b. POST /api/v1/assistant/chat (DuckDuckGo Web Search)
+    safe_print("[Test 5/8] POST /api/v1/assistant/chat (DuckDuckGo Web Search)")
+    payload_web = {"message": "What are the health benefits of garlic oil?"}
+    try:
+        t0 = time.time()
+        if live_mode:
+            json_data = json.dumps(payload_web).encode('utf-8')
+            headers = {'Content-Type': 'application/json'}
+            status, data = make_request("POST", "/api/v1/assistant/chat", data=json_data, headers=headers)
+        else:
+            r = client.post("/api/v1/assistant/chat", json=payload_web)
+            status, data = r.status_code, r.json()
+
+        dt = time.time() - t0
+        safe_print(f"  Status Code: {status} (in {dt:.3f}s)")
+        body_str = json.dumps(data)
+        body_snippet = body_str[:250] + "..." if len(body_str) > 250 else body_str
+        safe_print(f"  Response Body: {body_snippet}")
+        assert status == 200
+        assert "response" in data
+        assert "tool_activity" in data
+        safe_print("  => SUCCESS\n")
+        passed_count += 1
+    except Exception as e:
+        safe_print(f"  => FAILED: {e}\n")
+
     # 4. GET /api/v1/navigation/route?start=ENTRANCE&destination=AISLE_2
-    safe_print("[Test 5/6] GET /api/v1/navigation/route?start=ENTRANCE&destination=AISLE_2")
+    safe_print("[Test 6/8] GET /api/v1/navigation/route?start=ENTRANCE&destination=AISLE_2")
     try:
         t0 = time.time()
         path = "/api/v1/navigation/route?start=ENTRANCE&destination=AISLE_2"
@@ -202,7 +228,7 @@ def run_tests():
         safe_print(f"  => FAILED: {e}\n")
 
     # 5. GET /api/v1/telemetry/weight
-    safe_print("[Test 6/7] GET /api/v1/telemetry/weight")
+    safe_print("[Test 7/8] GET /api/v1/telemetry/weight")
     try:
         t0 = time.time()
         status, data = make_request("GET", "/api/v1/telemetry/weight")
@@ -220,7 +246,7 @@ def run_tests():
         safe_print(f"  => FAILED: {e}\n")
 
     # 6. Database Engine search_products Direct Check
-    safe_print("[Test 7/7] Database Engine search_products & Dataset Metadata")
+    safe_print("[Test 8/8] Database Engine search_products & Dataset Metadata")
     try:
         t0 = time.time()
         from app.core.database import search_products
@@ -240,7 +266,7 @@ def run_tests():
     except Exception as e:
         safe_print(f"  => FAILED: {e}\n")
 
-    total_count = 7
+    total_count = 8
     safe_print(f"=== TEST COMPLETE: {passed_count}/{total_count} PASSED ===")
     if passed_count == total_count:
         safe_print("Integration verification successful!")

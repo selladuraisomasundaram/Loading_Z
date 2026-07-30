@@ -4,19 +4,20 @@ import os
 import hashlib
 from typing import Dict, Any, List, Optional
 from app.gemma.engine import get_ollama_client, GEMMA_MODEL
-from app.agent.tools import search_catalog, get_route, check_inventory
+from app.agent.tools import search_catalog, get_route, check_inventory, search_web
 from app.navigation.pathfinder import map_to_spatial_node
 
 INTENT_SYSTEM_INSTRUCTION = (
     "You are an intent parser for a supermarket smart trolley assistant.\n"
     "Identify which tool to use and its argument based on the user's message.\n"
     "Available tools:\n"
-    "1. search_catalog(query): User searches for a product or asks about a product name (e.g. 'Where is butter?', 'Find me milk').\n"
+    "1. search_catalog(query): User searches for a product or asks about a store product name (e.g. 'Where is butter?', 'Find me milk').\n"
     "2. get_route(destination): User asks for directions, path, route, navigation, or how to get somewhere (e.g. 'Show route to Aisle 3', 'Navigate to checkout').\n"
     "3. check_inventory(sku): User asks about stock levels or checks inventory/price for a SKU format SKU-XXXXXX (e.g. 'Is SKU-E4B92C in stock?').\n"
-    "4. conversational: Greetings, general conversation, or queries requiring no tools (e.g. 'Hi', 'Hello').\n\n"
+    "4. search_web(query): You have access to a web search tool. ONLY use it for general knowledge, recipes, or nutrition. NEVER use it to check product prices, stock, or aisles—assume store data requires the catalog tool.\n"
+    "5. conversational: Greetings, general conversation, or queries requiring no tools (e.g. 'Hi', 'Hello').\n\n"
     "Output valid JSON format with keys:\n"
-    "- 'tool': 'search_catalog', 'get_route', 'check_inventory', or 'conversational'\n"
+    "- 'tool': 'search_catalog', 'get_route', 'check_inventory', 'search_web', or 'conversational'\n"
     "- 'argument': query, destination, SKU, or empty string."
 )
 
@@ -32,7 +33,11 @@ def fallback_parse_intent(message: str) -> Dict[str, Any]:
     if any(w in lower for w in ("hi", "hello", "hey", "morning", "afternoon", "evening", "who are you", "help", "thank", "thanks")):
         return {"tool": "conversational", "argument": ""}
 
-    # 1. Check for check_inventory (SKU)
+    # 1. Check for search_web (recipes, nutrition, health, general knowledge)
+    if any(w in lower for w in ("recipe", "cook", "how to make", "ingredients for", "nutrition", "calories", "healthy", "health benefits", "benefits of", "why is", "what is")):
+        return {"tool": "search_web", "argument": message.strip()}
+
+    # 2. Check for check_inventory (SKU)
     sku_match = re.search(r'sku-[a-f0-9]{4,8}', lower)
     if not sku_match:
         sku_match = re.search(r'sku[a-f0-9]{4,8}', lower)
@@ -49,7 +54,7 @@ def fallback_parse_intent(message: str) -> Dict[str, Any]:
         if any(w in lower for w in ("stock", "inventory", "left", "have", "qty", "quantity", "available", "check", "price")):
             return {"tool": "check_inventory", "argument": sku}
             
-    # 2. Check for get_route
+    # 3. Check for get_route
     if any(w in lower for w in ("route", "path", "map", "navigate", "directions", "way to", "get to", "go to")):
         dest = "ENTRANCE"
         if "checkout" in lower:
@@ -69,7 +74,7 @@ def fallback_parse_intent(message: str) -> Dict[str, Any]:
                             break
         return {"tool": "get_route", "argument": dest}
         
-    # 3. Check for search_catalog
+    # 4. Check for search_catalog
     if any(w in lower for w in ("find", "search", "where", "have", "buy", "get", "price of", "locate")):
         query = lower
         for word in ("where is", "where can i find", "do you have", "find", "search for", "locate", "price of", "price"):
@@ -123,7 +128,29 @@ async def orchestrate_message(message: str) -> Dict[str, Any]:
     route: Optional[Dict[str, Any]] = None
     
     # 2. Execute selected tool
-    if tool == "search_catalog":
+    if tool == "search_web":
+        search_query = argument if argument else message
+        web_results = search_web(search_query)
+        snippet_preview = web_results[:140] + "..." if len(web_results) > 140 else web_results
+        tool_activity.append({
+            "step": "DuckDuckGo Web Search",
+            "action": f"search_web('{search_query}')",
+            "result": snippet_preview
+        })
+
+        try:
+            prompt = (
+                f"You are a helpful supermarket smart trolley assistant.\n"
+                f"User query: {message}\n"
+                f"Web Search Results:\n{web_results}\n\n"
+                f"Synthesize a clear, accurate, and concise natural language answer based on the web search results above."
+            )
+            resp = await client.chat(model=model_name, messages=[{"role": "user", "content": prompt}])
+            response_text = resp.get("message", {}).get("content", "").strip()
+        except Exception:
+            response_text = f"Here is what I found online regarding '{search_query}':\n\n{web_results}"
+
+    elif tool == "search_catalog":
         prod_data = search_catalog(argument)
         if prod_data.get("success") and prod_data.get("verified"):
             price_str = f"₹{prod_data['price']}"
