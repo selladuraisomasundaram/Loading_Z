@@ -2,9 +2,13 @@ import os
 import json
 from typing import List, Dict, Any
 
-# Adjust path based on project structure
 from app.services.product_service import search_products
 from app.core.database import SessionLocal
+import sys
+
+# Ensure services is discoverable
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from services.co_occurrence_service import get_co_occurrence_candidates
 
 RECIPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'database', 'recipe_ingredients.json')
 
@@ -18,10 +22,9 @@ def normalize_text(text: str) -> str:
     """Basic normalization for matching."""
     return text.lower().strip()
 
-def get_recipe_recommendations(cart_items: List[str]) -> List[Dict[str, Any]]:
+def get_recipe_candidate_keywords(cart_items: List[str]) -> List[str]:
     """
-    Finds recipes that overlap with the cart items and recommends missing ingredients
-    by matching them against the local catalog.
+    Finds recipes that overlap with the cart items and returns missing ingredient keywords.
     """
     if not cart_items:
         return []
@@ -30,17 +33,14 @@ def get_recipe_recommendations(cart_items: List[str]) -> List[Dict[str, Any]]:
     if not recipes:
         return []
 
-    # Normalize cart items to a set of words/phrases
     cart_set = set(normalize_text(item) for item in cart_items)
     
-    # Also break down cart items into individual words to increase overlap chances
     cart_words = set()
     for item in cart_set:
         for word in item.split():
             if len(word) > 2:
                 cart_words.add(word)
 
-    recommended_products = []
     missing_ingredients_pool = set()
     
     for recipe in recipes:
@@ -48,11 +48,8 @@ def get_recipe_recommendations(cart_items: List[str]) -> List[Dict[str, Any]]:
         if not ingredients:
             continue
             
-        # Create a normalized set for the recipe ingredients
         recipe_set = set(normalize_text(ing) for ing in ingredients)
         
-        # Calculate overlap
-        # We consider a recipe ingredient "matched" if any cart item or cart word is in it
         overlap_count = 0
         missing = set()
         
@@ -76,47 +73,91 @@ def get_recipe_recommendations(cart_items: List[str]) -> List[Dict[str, Any]]:
                 
         overlap_ratio = overlap_count / len(recipe_set)
         
-        # If overlap is > 30%, we consider it a match
         if overlap_ratio > 0.30 and missing:
             missing_ingredients_pool.update(missing)
             
-    if not missing_ingredients_pool:
-        return []
+    return list(missing_ingredients_pool)
 
-    # Verify missing ingredients against the catalog
-    db = SessionLocal()
-    try:
-        found_products = []
-        seen_skus = set()
+def generate_hybrid_recommendations(cart_items: List[str], current_scanned_item: str = None) -> List[Dict[str, Any]]:
+    """
+    Unified hybrid recommendation pipeline.
+    Combines Co-occurrence (Tier 1), Recipe Overlap (Tier 2), and Cold-Start (Tier 3).
+    """
+    # Step A: Combine cart_items and current_scanned_item
+    combined_cart = list(cart_items)
+    if current_scanned_item and current_scanned_item not in combined_cart:
+        combined_cart.append(current_scanned_item)
         
-        for missing_ing in list(missing_ingredients_pool):
+    normalized_cart = set(normalize_text(item) for item in combined_cart)
+    
+    # Step B: Fetch candidate keywords
+    co_occurrence_keywords = get_co_occurrence_candidates(combined_cart)
+    recipe_keywords = get_recipe_candidate_keywords(combined_cart)
+    
+    # Step C: Deduplicate candidate keywords and exclude items already in cart
+    candidates_with_rules = []
+    seen_keywords = set()
+    
+    # Process co-occurrence first (higher priority)
+    for kw in co_occurrence_keywords:
+        kw_norm = normalize_text(kw)
+        if kw_norm not in seen_keywords and kw_norm not in normalized_cart:
+            seen_keywords.add(kw_norm)
+            # If cart is empty, it's cold start
+            rule = "COLD_START" if not combined_cart else "CO_OCCURRENCE"
+            candidates_with_rules.append({"keyword": kw, "rule": rule})
+            
+    # Process recipe matches
+    for kw in recipe_keywords:
+        kw_norm = normalize_text(kw)
+        if kw_norm not in seen_keywords and kw_norm not in normalized_cart:
+            seen_keywords.add(kw_norm)
+            candidates_with_rules.append({"keyword": kw, "rule": "RECIPE_MATCH"})
+            
+    if not candidates_with_rules:
+        return []
+        
+    # Step D & E: Pass candidate keywords to product_service and verify stock > 0
+    db = SessionLocal()
+    found_products = []
+    seen_skus = set()
+    
+    try:
+        from app.models.product import Product
+        
+        for candidate in candidates_with_rules:
             if len(found_products) >= 3:
                 break
                 
-            # Search catalog for this ingredient
-            matches = search_products(missing_ing, limit=1, db=db)
-            if matches:
-                # search_products returns a list of dictionaries in our mock or a list of SQLAlchemy objects
-                # Let's handle both
-                match = matches[0]
-                is_dict = isinstance(match, dict)
-                sku = match.get("sku") if is_dict else match.id
-                
-                if sku not in seen_skus:
-                    seen_skus.add(sku)
-                    
-                    product_data = {
-                        "sku": sku,
-                        "product_name": match.get("product_name") if is_dict else match.product_name,
-                        "brand": match.get("brand") if is_dict else match.brand,
-                        "price": match.get("sale_price", match.get("price")) if is_dict else match.sale_price,
-                        "category": match.get("category") if is_dict else match.category,
-                        "aisle": match.get("aisle") if is_dict else match.aisle,
-                        "reason": f"Completes a recipe (needs {missing_ing.title()})"
-                    }
-                    found_products.append(product_data)
+            keyword = candidate["keyword"]
+            rule = candidate["rule"]
+            
+            # Query the database
+            norm_query = f"%{keyword.strip()}%"
+            # We enforce stock > 0
+            matches = db.query(Product).filter(
+                (Product.product_name.ilike(norm_query)) | (Product.brand.ilike(norm_query)) | (Product.category.ilike(norm_query)),
+                Product.stock > 0
+            ).limit(2).all()
+            
+            for match in matches:
+                if match.id not in seen_skus:
+                    seen_skus.add(match.id)
+                    found_products.append({
+                        "sku": match.id,
+                        "product_name": match.product_name,
+                        "brand": match.brand,
+                        "price": match.sale_price,
+                        "category": match.category,
+                        "aisle": match.aisle,
+                        "rule_source": rule
+                    })
+                    break # Take top match for this keyword
                     
         return found_products[:3]
     finally:
         db.close()
 
+# For backward compatibility with endpoints that use get_recipe_recommendations
+def get_recipe_recommendations(cart_items: List[str]) -> List[Dict[str, Any]]:
+    return generate_hybrid_recommendations(cart_items)
