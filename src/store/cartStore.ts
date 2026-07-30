@@ -6,8 +6,9 @@ import {
   LoadCellTelemetryData,
   Product,
   Recommendation,
+  CheckoutResponse,
 } from "@/types";
-import { identifyProduct, getRecommendations } from "@/lib/api";
+import { identifyProduct, getRecommendations, checkout } from "@/lib/api";
 
 const ALLOWED_MIME_TYPES = [
   "image/jpeg",
@@ -37,6 +38,10 @@ export interface CartStoreState {
   isAnalyzing: boolean;
   gemmaResult: GemmaDetectionResult | null;
 
+  // Checkout API State
+  checkoutStatus: "idle" | "processing" | "success" | "error";
+  lastOrder: CheckoutResponse["order"] | null;
+
   // Hardware Load Cell Telemetry
   loadCell: LoadCellTelemetryData;
 
@@ -58,30 +63,31 @@ export interface CartStoreState {
 
   fetchRecommendations: () => Promise<void>;
   addRecommendationToCart: (recId: string) => void;
+  processCheckout: () => Promise<CheckoutResponse | null>;
   updateLoadCellWeight: (weightGrams: number, isStable?: boolean) => void;
 }
 
 const initialMockCartItems: CartItemType[] = [
   {
     product: {
-      id: "SKU-000101",
-      name: "Organic Whole Milk 1L",
-      brand: "Amul Fresh",
-      category: "Dairy & Eggs",
-      price: 68.0,
-      weightGrams: 1030,
+      id: "SKU-001",
+      name: "Maggi Noodles",
+      brand: "Nestle",
+      category: "Instant Foods / Noodles",
+      price: 12.0,
+      weightGrams: 70,
     },
     quantity: 2,
     addedAt: new Date().toISOString(),
   },
   {
     product: {
-      id: "SKU-000102",
-      name: "Multigrain Sourdough Bread",
-      brand: "Modern Bakery",
-      category: "Bakery",
-      price: 45.0,
-      weightGrams: 400,
+      id: "SKU-002",
+      name: "Almond Milk Unsweetened 1L",
+      brand: "Silk Fresh",
+      category: "Beverages / Dairy Alternatives",
+      price: 190.0,
+      weightGrams: 1020,
     },
     quantity: 1,
     addedAt: new Date().toISOString(),
@@ -93,8 +99,8 @@ const initialMockRecommendations: Recommendation[] = [
     id: "rec-001",
     title: "You may also like",
     product: {
-      id: "SKU-000301",
-      name: "Tomato Ketchup 500g",
+      id: "SKU-100",
+      name: "Ketchup",
       brand: "Heinz",
       category: "Condiments",
       price: 99.0,
@@ -106,7 +112,7 @@ const initialMockRecommendations: Recommendation[] = [
     id: "rec-002",
     title: "Frequently Bought Together",
     product: {
-      id: "SKU-000302",
+      id: "SKU-101",
       name: "Unsalted Creamery Butter 200g",
       brand: "Amul",
       category: "Dairy",
@@ -114,19 +120,6 @@ const initialMockRecommendations: Recommendation[] = [
       weightGrams: 200,
     },
     reason: "Frequently bought with Sourdough Bread",
-  },
-  {
-    id: "rec-003",
-    title: "Trending in Pantry",
-    product: {
-      id: "SKU-000303",
-      name: "Classic Roasted Oats 500g",
-      brand: "Quaker",
-      category: "Breakfast Cereal",
-      price: 185.0,
-      weightGrams: 500,
-    },
-    reason: "Popular healthy breakfast choice",
   },
 ];
 
@@ -173,17 +166,20 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
   fileError: null,
   isAnalyzing: false,
   gemmaResult: {
-    product_id: "SKU-000123",
-    product_name: "Maggi Noodles 2-Min",
+    product_id: "SKU-001",
+    product_name: "Maggi Noodles",
     brand: "Nestle",
-    category: "Snacks",
-    sub_category: "Instant Foods",
-    price: 14.0,
+    category: "Instant Foods",
+    sub_category: "Noodles",
+    price: 12.0,
     confidence: 0.96,
     verified: true,
     estimatedWeightGrams: 70,
     detectedAt: new Date().toLocaleTimeString(),
   },
+
+  checkoutStatus: "idle",
+  lastOrder: null,
 
   loadCell: {
     currentWeightGrams: initialTotals.expectedWeightGrams,
@@ -260,7 +256,26 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
         selectedFile ||
         new File(["dummy"], "maggi_noodles.jpg", { type: "image/jpeg" });
 
-      const result = await identifyProduct(targetFile);
+      const response = await identifyProduct(targetFile);
+
+      if (!response.success || !response.product) {
+        throw new Error(response.error || "Unable to identify product.");
+      }
+
+      const p = response.product;
+      const result: GemmaDetectionResult = {
+        product_id: p.product_id,
+        product_name: p.product_name,
+        brand: p.brand,
+        category: p.category,
+        sub_category: p.sub_category,
+        price: p.price,
+        confidence: p.confidence,
+        verified: p.verified,
+        estimatedWeightGrams: p.estimatedWeightGrams || 70,
+        imageUrl: p.image_url || undefined,
+        detectedAt: new Date().toLocaleTimeString(),
+      };
 
       set({
         gemmaResult: result,
@@ -269,7 +284,7 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
       });
     } catch (err: unknown) {
       const errorMessage =
-        err instanceof Error ? err.message : "Failed to analyze image.";
+        err instanceof Error ? err.message : "Unable to identify product.";
       set({
         fileError: errorMessage,
         isAnalyzing: false,
@@ -330,6 +345,9 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
         lastUpdated: new Date().toLocaleTimeString(),
       },
     });
+
+    // Refresh recommendations asynchronously
+    get().fetchRecommendations();
   },
 
   removeItem: (productId: string) => {
@@ -353,6 +371,8 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
         lastUpdated: new Date().toLocaleTimeString(),
       },
     });
+
+    get().fetchRecommendations();
   },
 
   increaseQuantity: (productId: string) => {
@@ -435,8 +455,30 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
     const { items } = get();
     set({ isRecommendationsLoading: true });
     try {
-      const results = await getRecommendations(items);
-      set({ recommendations: results, isRecommendationsLoading: false });
+      const payload = items.map((i) => ({
+        product_id: i.product.id,
+        quantity: i.quantity,
+      }));
+      const response = await getRecommendations(payload);
+
+      if (response.success && response.recommendations) {
+        const mappedRecs: Recommendation[] = response.recommendations.map(
+          (rec, idx) => ({
+            id: `rec-resp-${rec.product_id}-${idx}`,
+            title: "You may also like",
+            product: {
+              id: rec.product_id,
+              name: rec.product_name,
+              price: rec.price,
+              imageUrl: rec.image_url || undefined,
+            },
+            reason: rec.reason,
+          })
+        );
+        set({ recommendations: mappedRecs, isRecommendationsLoading: false });
+      } else {
+        set({ isRecommendationsLoading: false });
+      }
     } catch {
       set({ isRecommendationsLoading: false });
     }
@@ -455,6 +497,37 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
         weightGrams: target.product.weightGrams || 250,
       };
       get().addItem(product);
+    }
+  },
+
+  processCheckout: async () => {
+    const { items } = get();
+    if (items.length === 0) return null;
+
+    set({ checkoutStatus: "processing" });
+
+    try {
+      const payload = items.map((i) => ({
+        product_id: i.product.id,
+        quantity: i.quantity,
+      }));
+
+      const response = await checkout(payload);
+
+      if (response.success && response.order) {
+        set({
+          checkoutStatus: "success",
+          lastOrder: response.order,
+        });
+        get().clearCart();
+        return response;
+      } else {
+        set({ checkoutStatus: "error" });
+        throw new Error(response.error || "Checkout failed.");
+      }
+    } catch (err: unknown) {
+      set({ checkoutStatus: "error" });
+      throw err;
     }
   },
 

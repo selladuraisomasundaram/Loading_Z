@@ -18,6 +18,10 @@ export function useCart() {
   const fileError = useCartStore((state) => state.fileError);
   const isAnalyzing = useCartStore((state) => state.isAnalyzing);
   const gemmaResult = useCartStore((state) => state.gemmaResult);
+
+  const checkoutStatus = useCartStore((state) => state.checkoutStatus);
+  const lastOrder = useCartStore((state) => state.lastOrder);
+
   const loadCell = useCartStore((state) => state.loadCell);
   const recommendations = useCartStore((state) => state.recommendations);
   const isRecommendationsLoading = useCartStore(
@@ -41,6 +45,7 @@ export function useCart() {
   const addRecommendationToCart = useCartStore(
     (state) => state.addRecommendationToCart
   );
+  const processCheckout = useCartStore((state) => state.processCheckout);
 
   return {
     items,
@@ -57,6 +62,8 @@ export function useCart() {
     fileError,
     isAnalyzing,
     gemmaResult,
+    checkoutStatus,
+    lastOrder,
     loadCell,
     recommendations,
     isRecommendationsLoading,
@@ -70,5 +77,6 @@ export function useCart() {
     analyzeSelectedFile,
     addGemmaResultToCart,
     addRecommendationToCart,
+    processCheckout,
   };
 }

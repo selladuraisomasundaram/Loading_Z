@@ -1,18 +1,34 @@
 "use client";
 
 import React from "react";
-import { Receipt, CreditCard, ArrowRight, ShieldCheck } from "lucide-react";
+import { Receipt, CreditCard, ArrowRight, ShieldCheck, Loader2 } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { formatCurrency } from "@/lib/utils";
 
 export const BillingSummarySection: React.FC = () => {
-  const { itemCount, subtotal, discount, tax, total, clearCart } = useCart();
+  const {
+    itemCount,
+    subtotal,
+    discount,
+    tax,
+    total,
+    checkoutStatus,
+    processCheckout,
+  } = useCart();
 
-  const handleCheckout = () => {
-    alert(
-      `Checkout successful! Total amount paid: ${formatCurrency(total)}`
-    );
-    clearCart();
+  const handleCheckout = async () => {
+    try {
+      const response = await processCheckout();
+      if (response && response.order) {
+        alert(
+          `Checkout successful!\nOrder ID: ${response.order.order_id}\nTotal Paid: ${formatCurrency(response.order.total)}`
+        );
+      }
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Checkout processing error.";
+      alert(`Checkout Error: ${message}`);
+    }
   };
 
   return (
@@ -71,7 +87,7 @@ export const BillingSummarySection: React.FC = () => {
               Final Payable Amount
             </span>
             <span className="text-[10px] text-amber-700">
-              Inclusive of all taxes & discounts
+              Backend authoritative total
             </span>
           </div>
           <span className="text-2xl font-black text-amber-600 font-mono tracking-tight">
@@ -84,17 +100,26 @@ export const BillingSummarySection: React.FC = () => {
         <button
           type="button"
           onClick={handleCheckout}
-          disabled={itemCount === 0}
+          disabled={itemCount === 0 || checkoutStatus === "processing"}
           className="w-full py-3.5 bg-sky-600 hover:bg-sky-500 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-extrabold text-sm rounded-xl transition-all shadow-sm flex items-center justify-center gap-2"
         >
-          <CreditCard className="w-4 h-4" />
-          <span>Pay & Express Checkout</span>
-          <ArrowRight className="w-4 h-4" />
+          {checkoutStatus === "processing" ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin text-sky-200" />
+              <span>Processing Backend Checkout...</span>
+            </>
+          ) : (
+            <>
+              <CreditCard className="w-4 h-4" />
+              <span>Pay & Express Checkout</span>
+              <ArrowRight className="w-4 h-4" />
+            </>
+          )}
         </button>
 
         <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400">
           <ShieldCheck className="w-3.5 h-3.5 text-sky-600" />
-          <span>Verified Weight & Price Database Secured</span>
+          <span>Verified Weight & Authoritative Catalog Price Secured</span>
         </div>
       </div>
     </div>
