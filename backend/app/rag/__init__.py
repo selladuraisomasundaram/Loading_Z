@@ -5,5 +5,6 @@ Provides database access, product document conversion, embedding, FAISS vector s
 
 from .rag_service import rag_service, get_rag_service
 from .pipeline import execute_rag_pipeline
+from .nlp_processor import process_nlp_query
 
-__all__ = ["rag_service", "get_rag_service", "execute_rag_pipeline"]
+__all__ = ["rag_service", "get_rag_service", "execute_rag_pipeline", "process_nlp_query"]
