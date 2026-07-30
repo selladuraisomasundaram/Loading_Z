@@ -3,6 +3,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from app.models.product import Product
 from app.core.database import SessionLocal
+from app.navigation.zone_mapper import resolve_coordinates_for_product
 
 def get_db_session(db: Optional[Session] = None) -> Session:
     return db if db is not None else SessionLocal()
@@ -29,6 +30,7 @@ def resolve_product(query_name: str, db: Optional[Session] = None) -> Product:
 
         match = session.query(Product).filter((Product.id == sku_clean) | (Product.id == clean_query)).first()
         if match:
+            _inject_coords(match)
             return match
 
         # 1. Substring match on product_name or brand
@@ -36,6 +38,7 @@ def resolve_product(query_name: str, db: Optional[Session] = None) -> Product:
             (Product.product_name.ilike(norm_query)) | (Product.brand.ilike(norm_query))
         ).first()
         if sub:
+            _inject_coords(sub)
             return sub
 
         # 2. Individual keyword matching (e.g., Colgate, Toothpaste, Maggi, Parle, Amul, Atta, Milk, Butter)
@@ -48,15 +51,28 @@ def resolve_product(query_name: str, db: Optional[Session] = None) -> Product:
                 (Product.category.ilike(word_pattern))
             ).first()
             if match:
+                _inject_coords(match)
                 return match
 
-        return _get_fallback_product(query_name)
+        fb = _get_fallback_product(query_name)
+        _inject_coords(fb)
+        return fb
     except Exception as e:
         print(f"Error in resolve_product service: {e}")
-        return _get_fallback_product(query_name)
+        fb = _get_fallback_product(query_name)
+        _inject_coords(fb)
+        return fb
     finally:
         if should_close:
             session.close()
+
+def _inject_coords(product: Product):
+    from app.navigation.zone_mapper import resolve_coordinates_for_product
+    coords = resolve_coordinates_for_product(product.category, product.sub_category, product.id)
+    product.aisle = coords["aisle"]
+    product.zone_name = coords["zone_name"]
+    product.x = coords["x"]
+    product.y = coords["y"]
 
 def search_products(query: str, limit: int = 5, db: Optional[Session] = None) -> List[Dict[str, Any]]:
     """
@@ -77,7 +93,6 @@ def search_products(query: str, limit: int = 5, db: Optional[Session] = None) ->
             (Product.product_name.ilike(norm_query)) | (Product.brand.ilike(norm_query))
         ).limit(limit).all()
 
-        # 2. If fewer than limit, match on category or sub_category
         if len(matches) < limit:
             existing_ids = {p.id for p in matches}
             more_matches = session.query(Product).filter(
@@ -93,7 +108,13 @@ def search_products(query: str, limit: int = 5, db: Optional[Session] = None) ->
 
         results = []
         for p in matches[:limit]:
-            results.append(p.to_dict())
+            p_dict = p.to_dict()
+            coords = resolve_coordinates_for_product(p.category, p.sub_category, p.id)
+            p_dict["aisle"] = coords["aisle"]
+            p_dict["zone_name"] = coords["zone_name"]
+            p_dict["x"] = coords["x"]
+            p_dict["y"] = coords["y"]
+            results.append(p_dict)
 
         return results
     except Exception as e:

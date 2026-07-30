@@ -78,6 +78,11 @@ class ProductSchema(BaseModel):
     type: str = Field("", description="Specific product type/subtype")
     rating: float = Field(0.0, description="Product rating score")
     description: str = Field("", description="Full product description text")
+    
+    # Spatial coordinates
+    zone_name: str = Field(None, description="Physical store zone")
+    x: float = Field(None, description="X coordinate on 2D map")
+    y: float = Field(None, description="Y coordinate on 2D map")
 
     class Config:
         from_attributes = True
@@ -94,3 +99,8 @@ class VisionAnalysisResponse(BaseModel):
     shelf: str = Field(..., description="Shelf location in store")
     gemma_confidence: float = Field(..., ge=0.0, le=1.0, description="Gemma Vision confidence score")
     verified: bool = Field(..., description="Verification status")
+    
+    # Spatial coordinates
+    zone_name: str = Field(None, description="Physical store zone")
+    x: float = Field(None, description="X coordinate on 2D map")
+    y: float = Field(None, description="Y coordinate on 2D map")
