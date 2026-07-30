@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   Layers,
   Footprints,
@@ -15,7 +15,7 @@ import {
   Radio,
   Wifi,
   Activity,
-  Navigation,
+  Compass,
 } from "lucide-react";
 import {
   storeMapConfig,
@@ -28,8 +28,10 @@ import {
   AisleData,
   SupermarketZone,
 } from "./storeMapData";
-import { Product, PersonPosition, TrackedPerson, NavigationRequest } from "@/types";
+import { Product, PersonPosition, TrackedPerson, NavigationRequest, AStarResult } from "@/types";
 import { usePersonPositionStream } from "@/hooks/usePersonPositionStream";
+import { supermarketGraph } from "@/lib/navigation/navigationGraph";
+import { findNearestWalkableNode, findShortestPathAStar } from "@/lib/navigation/aStar";
 
 export interface MapPosition {
   x: number;
@@ -111,6 +113,35 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
       }
     : null;
 
+  // A* Shortest-Path Calculation Engine (Avoids shelves, walls & non-walkable areas)
+  const aStarResult: AStarResult | null = useMemo(() => {
+    if (!selectedProduct) return null;
+
+    const destX = selectedProduct.mapX || selectedProduct.location?.x || 510;
+    const destY = selectedProduct.mapY || selectedProduct.location?.y || 95;
+
+    // 1. Map person current position -> nearest walkable node
+    const startNode = findNearestWalkableNode(supermarketGraph, activePerson.x, activePerson.y);
+
+    // 2. Map destination product -> nearest walkable node
+    const goalNode = findNearestWalkableNode(supermarketGraph, destX, destY);
+
+    // 3. Compute A* shortest path over navigation graph
+    const res = findShortestPathAStar(supermarketGraph, startNode.id, goalNode.id);
+
+    // 4. Construct complete path sequence: [PersonPos, ...CorridorWaypoints, ProductPos]
+    const fullWaypoints = [
+      { x: activePerson.x, y: activePerson.y },
+      ...res.waypoints,
+      { x: destX, y: destY },
+    ];
+
+    return {
+      ...res,
+      waypoints: fullWaypoints,
+    };
+  }, [activePerson.x, activePerson.y, selectedProduct]);
+
   // Zoom Controls
   const handleZoomIn = () => setMapZoom((prev) => Math.min(prev + 0.25, 3.0));
   const handleZoomOut = () => setMapZoom((prev) => Math.max(prev - 0.25, 0.75));
@@ -187,7 +218,7 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
-                Real-Time Person & Product Destination Map
+                A* Supermarket Walkable Pathfinding Map
               </h3>
               <span
                 className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border flex items-center gap-1 ${getConnectionBadge(
@@ -199,7 +230,7 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Live Stream Tracker • Dynamic Product Route Vector (<code className="text-sky-700 font-bold">👤 ──→ 📍</code>)
+              Shortest Walkable Corridor Path • Avoids Shelves & Walls • Dynamic Recalculation
             </p>
           </div>
         </div>
@@ -683,56 +714,46 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
               })}
             </g>
 
-            {/* 9. DYNAMIC ROUTE VECTOR (👤 ─────────→ 📍 DESTINATION) */}
-            {navRequest && (
-              <g id="dynamic-navigation-route">
-                <line
-                  x1={navRequest.start.x}
-                  y1={navRequest.start.y}
-                  x2={navRequest.destination.x}
-                  y2={navRequest.destination.y}
+            {/* 9. A* SHORTEST WALKABLE PATH (Avoids Shelves & Walls) */}
+            {aStarResult && aStarResult.waypoints.length > 1 && (
+              <g id="astar-walkable-route">
+                {/* Glowing Outer Path Stroke */}
+                <polyline
+                  points={aStarResult.waypoints.map((p) => `${p.x},${p.y}`).join(" ")}
+                  fill="none"
                   stroke="#38bdf8"
-                  strokeWidth={5}
-                  strokeOpacity={0.35}
+                  strokeWidth="5"
+                  strokeOpacity="0.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
-                <line
-                  x1={navRequest.start.x}
-                  y1={navRequest.start.y}
-                  x2={navRequest.destination.x}
-                  y2={navRequest.destination.y}
+                {/* Animated Inner Dash Route */}
+                <polyline
+                  points={aStarResult.waypoints.map((p) => `${p.x},${p.y}`).join(" ")}
+                  fill="none"
                   stroke="#0284c7"
-                  strokeWidth={2.5}
+                  strokeWidth="2.8"
                   strokeDasharray="6,6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                   className="animate-pulse"
                 />
-                {/* Midpoint Route Badge */}
-                <g
-                  transform={`translate(${
-                    (navRequest.start.x + navRequest.destination.x) / 2
-                  }, ${(navRequest.start.y + navRequest.destination.y) / 2})`}
-                >
-                  <rect
-                    x={-55}
-                    y={-12}
-                    width={110}
-                    height={22}
-                    fill="#0f172a"
-                    stroke="#38bdf8"
-                    strokeWidth={1}
-                    rx={6}
-                  />
-                  <text
-                    x={0}
-                    y={3}
-                    fill="#38bdf8"
-                    fontSize="8.5"
-                    fontWeight="900"
-                    textAnchor="middle"
-                    fontFamily="sans-serif"
-                  >
-                    👤 ─────→ 📍 PRODUCT
-                  </text>
-                </g>
+
+                {/* Corridor Waypoint Junction Nodes */}
+                {aStarResult.waypoints.map((wp, idx) => {
+                  if (idx === 0 || idx === aStarResult.waypoints.length - 1) return null;
+                  return (
+                    <circle
+                      key={`wp-${idx}`}
+                      cx={wp.x}
+                      cy={wp.y}
+                      r={4}
+                      fill="#38bdf8"
+                      stroke="#ffffff"
+                      strokeWidth={1.2}
+                    />
+                  );
+                })}
               </g>
             )}
 
@@ -849,8 +870,8 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
         </div>
       </div>
 
-      {/* SELECTED PRODUCT DESTINATION CARD */}
-      {selectedProduct && navRequest && (
+      {/* SELECTED PRODUCT DESTINATION & A* ROUTE TELEMETRY CARD */}
+      {selectedProduct && navRequest && aStarResult && (
         <div className="bg-gradient-to-r from-sky-50 to-indigo-50 border border-sky-200 rounded-2xl p-5 shadow-sm space-y-3 relative">
           <button
             onClick={() => {
@@ -883,21 +904,21 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-3 text-xs bg-white border border-sky-200 px-4 py-2.5 rounded-xl shadow-2xs">
-              <div className="flex items-center gap-1 text-slate-700 font-bold">
-                <Navigation className="w-4 h-4 text-sky-600" />
-                <span>DYNAMIC ROUTE (👤 ──→ 📍)</span>
+              <div className="flex items-center gap-1.5 text-sky-700 font-extrabold">
+                <Compass className="w-4 h-4 text-sky-600" />
+                <span>A* WALKABLE ROUTE</span>
               </div>
               <div className="h-4 w-px bg-slate-200" />
               <div className="text-slate-600">
-                Aisle: <strong className="text-sky-700 font-extrabold">{navRequest.aisleId || "A3"}</strong>
+                Distance: <strong className="text-slate-900 font-mono font-extrabold">{aStarResult.totalDistanceMeters}m</strong>
               </div>
               <div className="h-4 w-px bg-slate-200" />
               <div className="text-slate-600">
-                Shelf: <strong className="text-sky-700 font-extrabold">{navRequest.shelfId || "S02"}</strong>
+                Walk Time: <strong className="text-slate-900 font-mono font-extrabold">~{aStarResult.estimatedTimeSeconds}s</strong>
               </div>
               <div className="h-4 w-px bg-slate-200" />
               <div className="text-slate-600">
-                Destination: <strong className="text-emerald-700 font-mono font-extrabold">({navRequest.destination.x}, {navRequest.destination.y})</strong>
+                Aisle: <strong className="text-sky-700 font-extrabold">{navRequest.aisleId || "A3"}</strong> ({navRequest.shelfId || "S02"})
               </div>
             </div>
           </div>
