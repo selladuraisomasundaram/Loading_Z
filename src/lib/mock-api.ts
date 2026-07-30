@@ -12,12 +12,24 @@ import { findShortestPathAStar, findNearestWalkableNode } from "./navigation/aSt
 
 const mockCatalog: ProductIdentificationResponse["product"][] = [
   {
+    product_id: "SKU-004",
+    product_name: "Aashirvaad Whole Wheat Flour 5kg",
+    brand: "Aashirvaad",
+    category: "Pantry",
+    sub_category: "Flour & Atta",
+    price: 245.0,
+    image_url: null,
+    confidence: 0.97,
+    verified: true,
+    estimatedWeightGrams: 5000,
+  },
+  {
     product_id: "SKU-001",
-    product_name: "Maggi Noodles",
+    product_name: "Maggi 2-Min Instant Noodles 70g",
     brand: "Nestle",
     category: "Instant Foods",
     sub_category: "Noodles",
-    price: 12.0,
+    price: 14.0,
     image_url: null,
     confidence: 0.96,
     verified: true,
@@ -52,14 +64,40 @@ const mockCatalog: ProductIdentificationResponse["product"][] = [
 export async function mockIdentifyProduct(
   file: File
 ): Promise<ProductIdentificationResponse> {
-  await new Promise((resolve) => setTimeout(resolve, 1200));
+  await new Promise((resolve) => setTimeout(resolve, 800));
 
-  const index = Math.abs(file.name.length) % mockCatalog.length;
-  const product = mockCatalog[index] ?? mockCatalog[0]!;
+  const nameLower = file.name.toLowerCase();
+
+  // Smart Vision OCR Keyword Matching
+  let matchedProduct = mockCatalog.find(
+    () =>
+      nameLower.includes("aashirvaad") ||
+      nameLower.includes("atta") ||
+      nameLower.includes("flour") ||
+      nameLower.includes("wheat") ||
+      nameLower.includes("aashir")
+  );
+
+  if (!matchedProduct && (nameLower.includes("maggi") || nameLower.includes("noodle"))) {
+    matchedProduct = mockCatalog.find((p) => p.product_id === "SKU-001");
+  }
+
+  if (!matchedProduct && (nameLower.includes("milk") || nameLower.includes("almond") || nameLower.includes("silk"))) {
+    matchedProduct = mockCatalog.find((p) => p.product_id === "SKU-002");
+  }
+
+  if (!matchedProduct && (nameLower.includes("chocolate") || nameLower.includes("lindt") || nameLower.includes("dark"))) {
+    matchedProduct = mockCatalog.find((p) => p.product_id === "SKU-003");
+  }
+
+  // Default to Aashirvaad Whole Wheat Flour for generic image uploads / screenshots
+  if (!matchedProduct) {
+    matchedProduct = mockCatalog.find((p) => p.product_id === "SKU-004") || mockCatalog[0]!;
+  }
 
   return {
     success: true,
-    product,
+    product: matchedProduct,
   };
 }
 
@@ -117,9 +155,10 @@ export async function mockCheckout(
   await new Promise((resolve) => setTimeout(resolve, 800));
 
   const itemMap: Record<string, number> = {
-    "SKU-001": 12.0,
+    "SKU-001": 14.0,
     "SKU-002": 190.0,
     "SKU-003": 150.0,
+    "SKU-004": 245.0,
     "SKU-100": 99.0,
     "SKU-101": 58.0,
     "SKU-102": 185.0,
@@ -221,16 +260,12 @@ export async function mockSendChatMessage(
   };
 }
 
-/**
- * PHASE 3: Executes real A* Pathfinding algorithm on supermarket graph
- */
 export async function mockGetStoreRoute(
   startNode = "ENTRANCE",
   destNode = "A3"
 ): Promise<RouteData> {
   await new Promise((resolve) => setTimeout(resolve, 200));
 
-  // Map destination string (e.g., "A3" or "ENTRANCE" or "CHECKOUT") to nearest graph node
   let startId = "N_ENTRANCE";
   if (startNode === "CHECKOUT") startId = "N_CHECKOUT";
 
@@ -238,7 +273,6 @@ export async function mockGetStoreRoute(
   if (destNode === "ENTRANCE") targetGraphNodeId = "N_ENTRANCE";
   if (destNode === "CHECKOUT") targetGraphNodeId = "N_CHECKOUT";
 
-  // Fallback lookup if node ID doesn't exist directly
   if (!supermarketGraph.nodes[targetGraphNodeId]) {
     const matched = Object.values(supermarketGraph.nodes).find(
       (n) => n.aisleId === destNode || n.id.includes(destNode)
@@ -246,7 +280,6 @@ export async function mockGetStoreRoute(
     if (matched) {
       targetGraphNodeId = matched.id;
     } else {
-      // Find nearest corridor node by default
       const nearest = findNearestWalkableNode(supermarketGraph, 500, 200);
       targetGraphNodeId = nearest.id;
     }

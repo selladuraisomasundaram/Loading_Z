@@ -228,6 +228,22 @@ export const storeZones: StoreZoneData[] = [
  */
 export const catalogProducts: Product[] = [
   {
+    id: "SKU-004",
+    name: "Aashirvaad Whole Wheat Flour 5kg",
+    price: 245.0,
+    weightGrams: 5000,
+    category: "Pantry",
+    brand: "Aashirvaad",
+    stock: 25,
+    location: {
+      aisleId: "C3",
+      shelfId: "S1",
+      shelfName: "Pantry Shelf S1",
+      x: 470,
+      y: 425,
+    },
+  },
+  {
     id: "P001",
     name: "Parle-G Glucose Biscuits 250g",
     price: 20.0,
