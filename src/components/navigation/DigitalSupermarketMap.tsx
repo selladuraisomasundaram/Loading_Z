@@ -13,6 +13,8 @@ import {
   Package,
   User,
   Radio,
+  Wifi,
+  Activity,
 } from "lucide-react";
 import {
   storeMapConfig,
@@ -25,7 +27,8 @@ import {
   AisleData,
   SupermarketZone,
 } from "./storeMapData";
-import { Product, PersonPosition, MovementHistoryPoint } from "@/types";
+import { Product, PersonPosition, TrackedPerson } from "@/types";
+import { usePersonPositionStream } from "@/hooks/usePersonPositionStream";
 
 export interface MapPosition {
   x: number;
@@ -33,33 +36,14 @@ export interface MapPosition {
   label: string;
 }
 
-export interface MapState {
-  currentMapPosition: MapPosition;
-  selectedProduct: Product | null;
-  selectedAisle: AisleData | null;
-  selectedZone: SupermarketZone | null;
-  mapZoom: number;
-  mapOffset: { x: number; y: number };
-}
-
 export interface DigitalSupermarketMapProps {
   initialSelectedAisleId?: string;
   selectedProduct?: Product | null;
-  userPosition?: MapPosition;
   personPosition?: PersonPosition;
   onAisleSelect?: (aisle: AisleData) => void;
   onProductSelect?: (product: Product | null) => void;
   onZoneSelect?: (zone: SupermarketZone | null) => void;
 }
-
-// Mock waypoint trajectory to test real-time positioning stream
-const mockWaypoints: PersonPosition[] = [
-  { x: 120, y: 525, zoneId: "ZONE_CHECKOUT", aisleId: "Entrance Concourse", timestamp: "12:00:00 PM" },
-  { x: 130, y: 395, zoneId: "ZONE_DAIRY", aisleId: "Aisle C1 - Dairy", timestamp: "12:00:15 PM" },
-  { x: 320, y: 245, zoneId: "ZONE_PREPARED_FOOD", aisleId: "Aisle B2 - Food", timestamp: "12:00:30 PM" },
-  { x: 510, y: 95, zoneId: "ZONE_SNACKS", aisleId: "Aisle A3 - Biscuits", timestamp: "12:00:45 PM" },
-  { x: 710, y: 95, zoneId: "ZONE_BEVERAGES", aisleId: "Aisle A4 - Beverages", timestamp: "12:01:00 PM" },
-];
 
 export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
   initialSelectedAisleId = "A3",
@@ -69,7 +53,17 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
   onProductSelect,
   onZoneSelect,
 }) => {
-  // Map State Architecture (Supports dynamic ESP32-CAM / backend position updates)
+  // Real-Time Stream Hook (Noise threshold = 5px, Multi-person tracking via personId)
+  const {
+    trackedPersons,
+    activePerson,
+    connectionStatus,
+    isSimulating,
+    setIsSimulating,
+    processIncomingPosition,
+  } = usePersonPositionStream({ autoSimulate: false, noiseThreshold: 5.0 });
+
+  // Map Controls State
   const [mapZoom, setMapZoom] = useState<number>(1.0);
   const [mapOffset, setMapOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [selectedAisleId, setSelectedAisleId] = useState<string>(initialSelectedAisleId);
@@ -80,46 +74,12 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
   const [showShelves, setShowShelves] = useState<boolean>(true);
   const [showTrail, setShowTrail] = useState<boolean>(true);
 
-  // Real-Time Person Positioning Layer State
-  const [currentPersonPosition, setCurrentPersonPosition] = useState<PersonPosition>(
-    externalPersonPosition || mockWaypoints[0]!
-  );
-  const [movementHistory, setMovementHistory] = useState<MovementHistoryPoint[]>([
-    { x: 120, y: 525, timestamp: "12:00:00 PM" },
-  ]);
-  const [isSimulatingStream, setIsSimulatingStream] = useState<boolean>(false);
-  const waypointIndexRef = useRef<number>(0);
-
-  // Synchronize external backend/ESP32 position updates automatically when sent
+  // Synchronize external backend position payload when pushed
   useEffect(() => {
     if (externalPersonPosition) {
-      setCurrentPersonPosition(externalPersonPosition);
-      setMovementHistory((prev) => [
-        ...prev.slice(-15),
-        { x: externalPersonPosition.x, y: externalPersonPosition.y, timestamp: externalPersonPosition.timestamp },
-      ]);
+      processIncomingPosition(externalPersonPosition);
     }
-  }, [externalPersonPosition]);
-
-  // Simulate Real-Time ESP32-CAM Coordinate Stream
-  useEffect(() => {
-    if (!isSimulatingStream) return;
-
-    const interval = setInterval(() => {
-      waypointIndexRef.current = (waypointIndexRef.current + 1) % mockWaypoints.length;
-      const nextPos = {
-        ...mockWaypoints[waypointIndexRef.current]!,
-        timestamp: new Date().toLocaleTimeString(),
-      };
-      setCurrentPersonPosition(nextPos);
-      setMovementHistory((prev) => [
-        ...prev.slice(-12),
-        { x: nextPos.x, y: nextPos.y, timestamp: nextPos.timestamp },
-      ]);
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [isSimulatingStream]);
+  }, [externalPersonPosition, processIncomingPosition]);
 
   // Pan / Dragging Ref State
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -129,8 +89,6 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
     selectedProduct?.aisleId ||
     selectedProduct?.location?.aisleId ||
     selectedAisleId;
-
-
 
   // Zoom Controls
   const handleZoomIn = () => setMapZoom((prev) => Math.min(prev + 0.25, 3.0));
@@ -183,37 +141,63 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
 
   const { viewWidth, viewHeight, boundaries } = storeMapConfig;
 
+  // Helper for Connection Status Badge styling
+  const getConnectionBadge = (status: string) => {
+    switch (status) {
+      case "Tracking":
+        return "bg-emerald-500 text-white animate-pulse";
+      case "Connected":
+        return "bg-emerald-100 text-emerald-800 border-emerald-300";
+      case "Connecting":
+        return "bg-amber-100 text-amber-800 border-amber-300 animate-pulse";
+      case "Disconnected":
+      default:
+        return "bg-rose-100 text-rose-800 border-rose-300";
+    }
+  };
+
   return (
     <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
-      {/* HEADER BAR & MAP CONTROLS */}
+      {/* HEADER BAR & STREAM STATUS */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100">
         <div className="flex items-center space-x-3">
           <div className="p-3 bg-sky-50 text-sky-600 rounded-2xl border border-sky-100">
             <Layers className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
-              Interactive 2D Supermarket Person Positioning Map
-            </h3>
-            <p className="text-xs text-slate-500 font-medium">
-              Real-Time Person Marker (👤) • Smooth Motion Animation • Movement History Trail
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                Real-Time Person Movement & Positioning Map
+              </h3>
+              {/* Connection Status Badge */}
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border flex items-center gap-1 ${getConnectionBadge(
+                  connectionStatus
+                )}`}
+              >
+                <Wifi className="w-3 h-3" />
+                <span>{connectionStatus}</span>
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              Live Stream Tracker • Euclidean Noise Filter (≥5px) • Unique <code className="text-sky-700 font-bold">personId</code> Identifier
             </p>
           </div>
         </div>
 
         {/* MAP TOOLBAR & CONTROLS */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Real-Time Stream Simulator Toggle */}
+          {/* Stream Simulator Toggle */}
           <button
-            onClick={() => setIsSimulatingStream(!isSimulatingStream)}
+            onClick={() => setIsSimulating(!isSimulating)}
             className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all border flex items-center gap-1.5 shadow-2xs ${
-              isSimulatingStream
+              isSimulating
                 ? "bg-emerald-600 border-emerald-700 text-white animate-pulse"
                 : "bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100"
             }`}
           >
             <Radio className="w-3.5 h-3.5" />
-            <span>{isSimulatingStream ? "📡 Live Stream Active" : "Simulate Stream"}</span>
+            <span>{isSimulating ? "📡 Stream Active" : "Simulate Stream"}</span>
           </button>
 
           {/* Zoom & Reset Toolbar */}
@@ -288,7 +272,7 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
                 : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
             }`}
           >
-            <Footprints className="w-3.5 h-3.5 inline mr-1" />
+            <Activity className="w-3.5 h-3.5 inline mr-1" />
             {showTrail ? "✓ Trail" : "Show Trail"}
           </button>
         </div>
@@ -680,81 +664,88 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
               })}
             </g>
 
-            {/* 9. MOVEMENT HISTORY TRAIL LAYER */}
-            {showTrail && movementHistory.length > 1 && (
-              <g id="movement-history-trail">
-                <polyline
-                  points={movementHistory.map((p) => `${p.x},${p.y}`).join(" ")}
-                  fill="none"
-                  stroke="#10b981"
-                  strokeWidth="2.5"
-                  strokeDasharray="4,4"
-                  strokeLinecap="round"
-                  opacity="0.65"
-                />
-                {movementHistory.map((pt, idx) => (
-                  <circle
-                    key={idx}
-                    cx={pt.x}
-                    cy={pt.y}
-                    r={3}
-                    fill="#10b981"
-                    opacity={0.4 + (idx / movementHistory.length) * 0.5}
-                  />
-                ))}
-              </g>
-            )}
+            {/* 9. MULTI-PERSON MOVEMENT TRAIL LAYER */}
+            {showTrail &&
+              Object.values(trackedPersons).map((person: TrackedPerson) => {
+                if (person.history.length < 2) return null;
+                return (
+                  <g key={`trail-${person.personId}`} id={`trail-${person.personId}`}>
+                    <polyline
+                      points={person.history.map((p) => `${p.x},${p.y}`).join(" ")}
+                      fill="none"
+                      stroke="#10b981"
+                      strokeWidth="2.5"
+                      strokeDasharray="4,4"
+                      strokeLinecap="round"
+                      opacity="0.7"
+                    />
+                    {person.history.map((pt, idx) => (
+                      <circle
+                        key={idx}
+                        cx={pt.x}
+                        cy={pt.y}
+                        r={3}
+                        fill="#10b981"
+                        opacity={0.35 + (idx / person.history.length) * 0.55}
+                      />
+                    ))}
+                  </g>
+                );
+              })}
 
-            {/* 10. REAL-TIME PERSON POSITIONING MARKER (👤) */}
-            <g
-              id="person-position-marker"
-              className="transition-all duration-700 ease-in-out cursor-pointer"
-            >
-              {/* Pulsating outer sonar ring */}
-              <circle
-                cx={currentPersonPosition.x}
-                cy={currentPersonPosition.y}
-                r={18}
-                fill="#10b981"
-                fillOpacity={0.25}
-                className="animate-ping"
-              />
-              <circle
-                cx={currentPersonPosition.x}
-                cy={currentPersonPosition.y}
-                r={10}
-                fill="#10b981"
-                stroke="#ffffff"
-                strokeWidth={2}
-              />
-              {/* Human icon badge */}
-              <g transform={`translate(${currentPersonPosition.x - 5}, ${currentPersonPosition.y - 5})`}>
-                <User className="w-2.5 h-2.5 text-white" />
-              </g>
-
-              {/* Dynamic Label Badge */}
-              <rect
-                x={currentPersonPosition.x - 60}
-                y={currentPersonPosition.y - 32}
-                width={120}
-                height={20}
-                fill="#064e3b"
-                stroke="#10b981"
-                strokeWidth={1}
-                rx={5}
-              />
-              <text
-                x={currentPersonPosition.x}
-                y={currentPersonPosition.y - 19}
-                fill="#ffffff"
-                fontSize="8.5"
-                fontWeight="900"
-                textAnchor="middle"
-                fontFamily="sans-serif"
+            {/* 10. REAL-TIME MULTI-PERSON POSITIONING MARKERS (👤 personId) */}
+            {Object.values(trackedPersons).map((person: TrackedPerson) => (
+              <g
+                key={person.personId}
+                id={`person-marker-${person.personId}`}
+                className="transition-all duration-700 ease-in-out cursor-pointer"
               >
-                👤 PERSON ({currentPersonPosition.aisleId})
-              </text>
-            </g>
+                {/* Pulsating outer sonar ring */}
+                <circle
+                  cx={person.x}
+                  cy={person.y}
+                  r={18}
+                  fill="#10b981"
+                  fillOpacity={0.25}
+                  className="animate-ping"
+                />
+                <circle
+                  cx={person.x}
+                  cy={person.y}
+                  r={10}
+                  fill="#10b981"
+                  stroke="#ffffff"
+                  strokeWidth={2}
+                />
+                {/* Human icon inside marker */}
+                <g transform={`translate(${person.x - 5}, ${person.y - 5})`}>
+                  <User className="w-2.5 h-2.5 text-white" />
+                </g>
+
+                {/* Dynamic Label Badge */}
+                <rect
+                  x={person.x - 65}
+                  y={person.y - 32}
+                  width={130}
+                  height={20}
+                  fill="#064e3b"
+                  stroke="#10b981"
+                  strokeWidth={1}
+                  rx={5}
+                />
+                <text
+                  x={person.x}
+                  y={person.y - 19}
+                  fill="#ffffff"
+                  fontSize="8.5"
+                  fontWeight="900"
+                  textAnchor="middle"
+                  fontFamily="sans-serif"
+                >
+                  👤 {person.personId} ({person.aisleId})
+                </text>
+              </g>
+            ))}
           </g>
         </svg>
       </div>
@@ -767,24 +758,24 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
           </div>
           <div>
             <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-              <span>👤 Current Location</span>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 animate-pulse">
-                LIVE POSITION
+              <span>👤 Current Location ({activePerson.personId})</span>
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border uppercase ${getConnectionBadge(connectionStatus)}`}>
+                {connectionStatus}
               </span>
             </h4>
             <p className="text-xs text-slate-600 mt-0.5">
-              Zone: <strong className="text-emerald-900">{currentPersonPosition.zoneId}</strong> • Aisle: <strong className="text-emerald-900">{currentPersonPosition.aisleId}</strong>
+              Current Zone: <strong className="text-emerald-900">{activePerson.zoneId}</strong> • Current Aisle: <strong className="text-emerald-900">{activePerson.aisleId}</strong>
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 text-xs bg-white border border-emerald-200 px-4 py-2 rounded-xl">
           <div className="text-slate-600">
-            Coordinates: <strong className="text-emerald-700 font-mono font-extrabold">({currentPersonPosition.x}, {currentPersonPosition.y})</strong>
+            Coordinates: <strong className="text-emerald-700 font-mono font-extrabold">({activePerson.x}, {activePerson.y})</strong>
           </div>
           <div className="h-4 w-px bg-slate-200" />
           <div className="text-slate-600">
-            Last Updated: <strong className="text-slate-800 font-mono">{currentPersonPosition.timestamp}</strong>
+            Last Updated: <strong className="text-slate-800 font-mono">{activePerson.timestamp}</strong>
           </div>
         </div>
       </div>

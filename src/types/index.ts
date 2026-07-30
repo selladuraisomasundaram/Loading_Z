@@ -10,12 +10,27 @@ export type ActiveTab = "dashboard" | "assistant" | "map" | "settings";
 
 export type DetectionStatus = "idle" | "uploading" | "analyzing" | "success" | "error";
 
+export type PositionConnectionStatus = "Connected" | "Connecting" | "Disconnected" | "Tracking";
+
 export interface PersonPosition {
+  personId?: string;
   x: number;
   y: number;
   zoneId: string;
   aisleId: string;
   timestamp: string;
+}
+
+export interface TrackedPerson {
+  personId: string;
+  name: string;
+  x: number;
+  y: number;
+  zoneId: string;
+  aisleId: string;
+  timestamp: string;
+  status: PositionConnectionStatus;
+  history: MovementHistoryPoint[];
 }
 
 export interface MovementHistoryPoint {
