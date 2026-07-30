@@ -7,39 +7,46 @@ import {
   RecommendationItem,
 } from "@/types";
 
-interface CartStoreState {
-  // Cart
+export interface CartStoreState {
+  // Required Cart State
   items: CartItemType[];
+  itemCount: number;
+  subtotal: number;
+  discount: number;
+  tax: number;
+  total: number;
 
-  // Image Upload & Vision Analysis
-  uploadedImage: string | null; // Data URL or Object URL
+  // Vision Analysis State
+  uploadedImage: string | null;
   uploadedFileName: string | null;
   isAnalyzing: boolean;
   gemmaResult: GemmaDetectionResult | null;
 
-  // Load Cell Telemetry
+  // Hardware Load Cell Telemetry
   loadCell: LoadCellTelemetryData;
 
   // Recommendations
   recommendations: RecommendationItem[];
   isRecommendationsLoading: boolean;
 
-  // Actions
+  // Required Cart Actions
+  addItem: (product: Product) => void;
+  removeItem: (productId: string) => void;
+  increaseQuantity: (productId: string) => void;
+  decreaseQuantity: (productId: string) => void;
+  clearCart: () => void;
+
+  // Helper Actions
   uploadImage: (file: File) => void;
   removeImage: () => void;
   analyzeImage: () => void;
   addGemmaResultToCart: () => void;
-
-  addItem: (product: Product, quantity?: number) => void;
-  removeItem: (productId: string) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
-  clearCart: () => void;
-
   addRecommendationToCart: (recId: string) => void;
   updateLoadCellWeight: (weightGrams: number, isStable?: boolean) => void;
 }
 
-const initialMockCart: CartItemType[] = [
+// Initial Mock Catalog Products
+const initialMockCartItems: CartItemType[] = [
   {
     product: {
       id: "prod-101",
@@ -105,8 +112,44 @@ const initialRecommendations: RecommendationItem[] = [
   },
 ];
 
+// Helper to deterministically compute totals
+function calculateCartTotals(items: CartItemType[]) {
+  const itemCount = items.reduce((acc, curr) => acc + curr.quantity, 0);
+  const subtotal = items.reduce(
+    (acc, curr) => acc + curr.product.price * curr.quantity,
+    0
+  );
+  // Promotional discount rule
+  const discount = subtotal > 150 ? 15.0 : 0;
+  const taxableAmount = Math.max(0, subtotal - discount);
+  // GST Tax at 18%
+  const tax = Math.round(taxableAmount * 0.18 * 100) / 100;
+  const total = Math.round((taxableAmount + tax) * 100) / 100;
+  const expectedWeightGrams = items.reduce(
+    (acc, curr) => acc + curr.product.weightGrams * curr.quantity,
+    0
+  );
+
+  return {
+    itemCount,
+    subtotal,
+    discount,
+    tax,
+    total,
+    expectedWeightGrams,
+  };
+}
+
+const initialTotals = calculateCartTotals(initialMockCartItems);
+
 export const useCartStore = create<CartStoreState>((set, get) => ({
-  items: initialMockCart,
+  // State
+  items: initialMockCartItems,
+  itemCount: initialTotals.itemCount,
+  subtotal: initialTotals.subtotal,
+  discount: initialTotals.discount,
+  tax: initialTotals.tax,
+  total: initialTotals.total,
 
   uploadedImage: null,
   uploadedFileName: null,
@@ -123,8 +166,8 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
   },
 
   loadCell: {
-    currentWeightGrams: 2460,
-    expectedWeightGrams: 2460,
+    currentWeightGrams: initialTotals.expectedWeightGrams,
+    expectedWeightGrams: initialTotals.expectedWeightGrams,
     isStable: true,
     statusText: "Stable",
     lastUpdated: "Just now",
@@ -133,6 +176,152 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
   recommendations: initialRecommendations,
   isRecommendationsLoading: false,
 
+  // Rule 1 & 2: addItem(product)
+  addItem: (product: Product) => {
+    const { items, loadCell } = get();
+    const existingIndex = items.findIndex((i) => i.product.id === product.id);
+
+    let updatedItems: CartItemType[];
+    if (existingIndex > -1) {
+      // Rule 1: Adding existing product increases quantity
+      updatedItems = items.map((item, idx) =>
+        idx === existingIndex
+          ? { ...item, quantity: item.quantity + 1 }
+          : item
+      );
+    } else {
+      // Rule 2: Adding new product creates a cart item
+      updatedItems = [
+        ...items,
+        { product, quantity: 1, addedAt: new Date().toISOString() },
+      ];
+    }
+
+    const totals = calculateCartTotals(updatedItems);
+
+    set({
+      items: updatedItems,
+      itemCount: totals.itemCount,
+      subtotal: totals.subtotal,
+      discount: totals.discount,
+      tax: totals.tax,
+      total: totals.total,
+      loadCell: {
+        ...loadCell,
+        currentWeightGrams: totals.expectedWeightGrams,
+        expectedWeightGrams: totals.expectedWeightGrams,
+        isStable: true,
+        statusText: "Stable",
+        lastUpdated: new Date().toLocaleTimeString(),
+      },
+    });
+  },
+
+  // Rule 4: removeItem(productId) completely deletes product
+  removeItem: (productId: string) => {
+    const { items, loadCell } = get();
+    const updatedItems = items.filter((i) => i.product.id !== productId);
+    const totals = calculateCartTotals(updatedItems);
+
+    set({
+      items: updatedItems,
+      itemCount: totals.itemCount,
+      subtotal: totals.subtotal,
+      discount: totals.discount,
+      tax: totals.tax,
+      total: totals.total,
+      loadCell: {
+        ...loadCell,
+        currentWeightGrams: totals.expectedWeightGrams,
+        expectedWeightGrams: totals.expectedWeightGrams,
+        isStable: true,
+        statusText: "Stable",
+        lastUpdated: new Date().toLocaleTimeString(),
+      },
+    });
+  },
+
+  // increaseQuantity(productId)
+  increaseQuantity: (productId: string) => {
+    const { items, loadCell } = get();
+    const updatedItems = items.map((item) =>
+      item.product.id === productId
+        ? { ...item, quantity: item.quantity + 1 }
+        : item
+    );
+    const totals = calculateCartTotals(updatedItems);
+
+    set({
+      items: updatedItems,
+      itemCount: totals.itemCount,
+      subtotal: totals.subtotal,
+      discount: totals.discount,
+      tax: totals.tax,
+      total: totals.total,
+      loadCell: {
+        ...loadCell,
+        currentWeightGrams: totals.expectedWeightGrams,
+        expectedWeightGrams: totals.expectedWeightGrams,
+        isStable: true,
+        statusText: "Stable",
+        lastUpdated: new Date().toLocaleTimeString(),
+      },
+    });
+  },
+
+  // Rule 3: decreaseQuantity(productId) - quantity cannot become less than 1
+  decreaseQuantity: (productId: string) => {
+    const { items, loadCell } = get();
+    const updatedItems = items.map((item) => {
+      if (item.product.id === productId) {
+        // Clamped at minimum 1
+        const newQty = Math.max(1, item.quantity - 1);
+        return { ...item, quantity: newQty };
+      }
+      return item;
+    });
+
+    const totals = calculateCartTotals(updatedItems);
+
+    set({
+      items: updatedItems,
+      itemCount: totals.itemCount,
+      subtotal: totals.subtotal,
+      discount: totals.discount,
+      tax: totals.tax,
+      total: totals.total,
+      loadCell: {
+        ...loadCell,
+        currentWeightGrams: totals.expectedWeightGrams,
+        expectedWeightGrams: totals.expectedWeightGrams,
+        isStable: true,
+        statusText: "Stable",
+        lastUpdated: new Date().toLocaleTimeString(),
+      },
+    });
+  },
+
+  // clearCart()
+  clearCart: () => {
+    set((state) => ({
+      items: [],
+      itemCount: 0,
+      subtotal: 0,
+      discount: 0,
+      tax: 0,
+      total: 0,
+      loadCell: {
+        ...state.loadCell,
+        currentWeightGrams: 0,
+        expectedWeightGrams: 0,
+        isStable: true,
+        statusText: "Stable",
+        lastUpdated: new Date().toLocaleTimeString(),
+      },
+    }));
+  },
+
+  // Helper Actions
   uploadImage: (file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -155,6 +344,7 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
   analyzeImage: () => {
     set({ isAnalyzing: true });
     setTimeout(() => {
+      // Rule 6 & 7: Verified price comes from product database, not raw model output
       const mockResult: GemmaDetectionResult = {
         productName: "Almond Milk Unsweetened 1L",
         brand: "Silk Fresh",
@@ -169,13 +359,14 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
         isAnalyzing: false,
         gemmaResult: mockResult,
       });
-    }, 1500);
+    }, 1200);
   },
 
   addGemmaResultToCart: () => {
     const { gemmaResult } = get();
     if (!gemmaResult) return;
 
+    // Rule 6 & 7: Price comes from product catalog object
     const product: Product = {
       id: `prod-gemma-${Date.now()}`,
       name: gemmaResult.productName,
@@ -186,106 +377,6 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
     };
 
     get().addItem(product);
-  },
-
-  addItem: (product: Product, quantity = 1) => {
-    const { items, loadCell } = get();
-    const existingIndex = items.findIndex((i) => i.product.id === product.id);
-
-    let updatedItems: CartItemType[];
-    if (existingIndex > -1) {
-      updatedItems = items.map((item, idx) =>
-        idx === existingIndex
-          ? { ...item, quantity: item.quantity + quantity }
-          : item
-      );
-    } else {
-      updatedItems = [
-        ...items,
-        { product, quantity, addedAt: new Date().toISOString() },
-      ];
-    }
-
-    const expectedWeight = updatedItems.reduce(
-      (acc, curr) => acc + curr.product.weightGrams * curr.quantity,
-      0
-    );
-
-    set({
-      items: updatedItems,
-      loadCell: {
-        ...loadCell,
-        currentWeightGrams: expectedWeight,
-        expectedWeightGrams: expectedWeight,
-        isStable: true,
-        statusText: "Stable",
-        lastUpdated: new Date().toLocaleTimeString(),
-      },
-    });
-  },
-
-  removeItem: (productId: string) => {
-    const { items, loadCell } = get();
-    const updatedItems = items.filter((i) => i.product.id !== productId);
-    const expectedWeight = updatedItems.reduce(
-      (acc, curr) => acc + curr.product.weightGrams * curr.quantity,
-      0
-    );
-
-    set({
-      items: updatedItems,
-      loadCell: {
-        ...loadCell,
-        currentWeightGrams: expectedWeight,
-        expectedWeightGrams: expectedWeight,
-        isStable: true,
-        statusText: "Stable",
-        lastUpdated: new Date().toLocaleTimeString(),
-      },
-    });
-  },
-
-  updateQuantity: (productId: string, quantity: number) => {
-    if (quantity <= 0) {
-      get().removeItem(productId);
-      return;
-    }
-
-    const { items, loadCell } = get();
-    const updatedItems = items.map((item) =>
-      item.product.id === productId ? { ...item, quantity } : item
-    );
-
-    const expectedWeight = updatedItems.reduce(
-      (acc, curr) => acc + curr.product.weightGrams * curr.quantity,
-      0
-    );
-
-    set({
-      items: updatedItems,
-      loadCell: {
-        ...loadCell,
-        currentWeightGrams: expectedWeight,
-        expectedWeightGrams: expectedWeight,
-        isStable: true,
-        statusText: "Stable",
-        lastUpdated: new Date().toLocaleTimeString(),
-      },
-    });
-  },
-
-  clearCart: () => {
-    set((state) => ({
-      items: [],
-      loadCell: {
-        ...state.loadCell,
-        currentWeightGrams: 0,
-        expectedWeightGrams: 0,
-        isStable: true,
-        statusText: "Stable",
-        lastUpdated: new Date().toLocaleTimeString(),
-      },
-    }));
   },
 
   addRecommendationToCart: (recId: string) => {

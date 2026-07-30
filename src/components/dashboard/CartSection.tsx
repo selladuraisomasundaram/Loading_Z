@@ -1,13 +1,19 @@
 "use client";
 
 import React from "react";
-import { ShoppingBag, Plus, Minus, Trash2, PackageOpen } from "lucide-react";
+import { ShoppingBag, Trash2, PackageOpen } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
-import { formatCurrency, formatWeight } from "@/lib/utils";
+import CartItem from "@/components/ui/CartItem";
 
 export const CartSection: React.FC = () => {
-  const { items, totalItemCount, updateQuantity, removeItem, clearCart } =
-    useCart();
+  const {
+    items,
+    itemCount,
+    increaseQuantity,
+    decreaseQuantity,
+    removeItem,
+    clearCart,
+  } = useCart();
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
@@ -28,7 +34,7 @@ export const CartSection: React.FC = () => {
 
         <div className="flex items-center space-x-2">
           <span className="bg-amber-100 text-amber-900 font-bold text-xs px-2.5 py-1 rounded-full border border-amber-300">
-            {totalItemCount} {totalItemCount === 1 ? "Item" : "Items"}
+            {itemCount} {itemCount === 1 ? "Item" : "Items"}
           </span>
 
           {items.length > 0 && (
@@ -61,70 +67,13 @@ export const CartSection: React.FC = () => {
       ) : (
         <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
           {items.map((item) => (
-            <div
+            <CartItem
               key={item.product.id}
-              className="flex items-center justify-between p-3.5 bg-slate-50/80 border border-slate-200 rounded-xl hover:border-sky-300 hover:bg-white transition-all gap-3"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center space-x-2">
-                  <h4 className="font-bold text-slate-900 text-sm truncate">
-                    {item.product.name}
-                  </h4>
-                  {item.product.brand && (
-                    <span className="bg-slate-200/80 text-slate-700 text-[10px] font-semibold px-1.5 py-0.5 rounded">
-                      {item.product.brand}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
-                  <span>{formatCurrency(item.product.price)} each</span>
-                  <span>•</span>
-                  <span>{formatWeight(item.product.weightGrams)}</span>
-                </p>
-              </div>
-
-              {/* Quantity Controls & Controls */}
-              <div className="flex items-center space-x-3 shrink-0">
-                <div className="flex items-center bg-white border border-slate-300 rounded-lg p-1 shadow-2xs">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateQuantity(item.product.id, item.quantity - 1)
-                    }
-                    className="p-1 hover:bg-slate-100 rounded text-slate-600 transition-colors"
-                  >
-                    <Minus className="w-3.5 h-3.5" />
-                  </button>
-                  <span className="w-7 text-center font-bold text-slate-900 text-xs">
-                    {item.quantity}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateQuantity(item.product.id, item.quantity + 1)
-                    }
-                    className="p-1 hover:bg-slate-100 rounded text-slate-600 transition-colors"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <div className="text-right w-20">
-                  <p className="font-extrabold text-amber-600 text-sm font-mono">
-                    {formatCurrency(item.product.price * item.quantity)}
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => removeItem(item.product.id)}
-                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                  title="Remove item"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
+              item={item}
+              onIncrease={(id) => increaseQuantity(id)}
+              onDecrease={(id) => decreaseQuantity(id)}
+              onRemove={(id) => removeItem(id)}
+            />
           ))}
         </div>
       )}

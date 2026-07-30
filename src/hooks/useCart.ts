@@ -1,10 +1,15 @@
 "use client";
 
 import { useCartStore } from "@/store/cartStore";
-import { GSTBillingSummaryData } from "@/types";
 
 export function useCart() {
   const items = useCartStore((state) => state.items);
+  const itemCount = useCartStore((state) => state.itemCount);
+  const subtotal = useCartStore((state) => state.subtotal);
+  const discount = useCartStore((state) => state.discount);
+  const tax = useCartStore((state) => state.tax);
+  const total = useCartStore((state) => state.total);
+
   const uploadedImage = useCartStore((state) => state.uploadedImage);
   const uploadedFileName = useCartStore((state) => state.uploadedFileName);
   const isAnalyzing = useCartStore((state) => state.isAnalyzing);
@@ -15,48 +20,29 @@ export function useCart() {
     (state) => state.isRecommendationsLoading
   );
 
+  const addItem = useCartStore((state) => state.addItem);
+  const removeItem = useCartStore((state) => state.removeItem);
+  const increaseQuantity = useCartStore((state) => state.increaseQuantity);
+  const decreaseQuantity = useCartStore((state) => state.decreaseQuantity);
+  const clearCart = useCartStore((state) => state.clearCart);
+
   const uploadImage = useCartStore((state) => state.uploadImage);
   const removeImage = useCartStore((state) => state.removeImage);
   const analyzeImage = useCartStore((state) => state.analyzeImage);
   const addGemmaResultToCart = useCartStore(
     (state) => state.addGemmaResultToCart
   );
-
-  const addItem = useCartStore((state) => state.addItem);
-  const removeItem = useCartStore((state) => state.removeItem);
-  const updateQuantity = useCartStore((state) => state.updateQuantity);
-  const clearCart = useCartStore((state) => state.clearCart);
   const addRecommendationToCart = useCartStore(
     (state) => state.addRecommendationToCart
   );
 
-  const totalItemCount = items.reduce((acc, curr) => acc + curr.quantity, 0);
-
-  const subtotal = items.reduce(
-    (acc, curr) => acc + curr.product.price * curr.quantity,
-    0
-  );
-
-  // 5% discount if subtotal > ₹150
-  const discount = subtotal > 150 ? 15.0 : 0;
-  const taxableAmount = Math.max(0, subtotal - discount);
-  const gstRatePercent = 18;
-  const gstAmount = (taxableAmount * gstRatePercent) / 100;
-  const finalPayableAmount = taxableAmount + gstAmount;
-
-  const billingSummary: GSTBillingSummaryData = {
-    itemCount: totalItemCount,
-    subtotal,
-    discount,
-    gstRatePercent,
-    gstAmount,
-    finalPayableAmount,
-    currency: "₹",
-  };
-
   return {
     items,
-    totalItemCount,
+    itemCount,
+    subtotal,
+    discount,
+    tax,
+    total,
     uploadedImage,
     uploadedFileName,
     isAnalyzing,
@@ -64,15 +50,15 @@ export function useCart() {
     loadCell,
     recommendations,
     isRecommendationsLoading,
-    billingSummary,
+    addItem,
+    removeItem,
+    increaseQuantity,
+    decreaseQuantity,
+    clearCart,
     uploadImage,
     removeImage,
     analyzeImage,
     addGemmaResultToCart,
-    addItem,
-    removeItem,
-    updateQuantity,
-    clearCart,
     addRecommendationToCart,
   };
 }

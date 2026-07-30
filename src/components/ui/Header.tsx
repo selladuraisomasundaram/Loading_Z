@@ -5,7 +5,7 @@ import { ShoppingCart, Cpu, Server, Sparkles } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 
 export const Header: React.FC = () => {
-  const { totalItemCount } = useCart();
+  const { itemCount } = useCart();
 
   return (
     <header className="w-full bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30 px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
@@ -69,7 +69,7 @@ export const Header: React.FC = () => {
         {/* Trolley Cart Counter */}
         <div className="flex items-center space-x-2 bg-sky-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-sm hover:bg-sky-500 transition-colors">
           <Cpu className="w-4 h-4 text-sky-200" />
-          <span>Cart: {totalItemCount} Items</span>
+          <span>Cart: {itemCount} Items</span>
         </div>
       </div>
     </header>

@@ -6,13 +6,11 @@ import { useCart } from "@/hooks/useCart";
 import { formatCurrency } from "@/lib/utils";
 
 export const BillingSummarySection: React.FC = () => {
-  const { billingSummary, clearCart } = useCart();
+  const { itemCount, subtotal, discount, tax, total, clearCart } = useCart();
 
   const handleCheckout = () => {
     alert(
-      `Checkout successful! Total amount paid: ${formatCurrency(
-        billingSummary.finalPayableAmount
-      )}`
+      `Checkout successful! Total amount paid: ${formatCurrency(total)}`
     );
     clearCart();
   };
@@ -36,33 +34,33 @@ export const BillingSummarySection: React.FC = () => {
       <div className="space-y-2.5 text-xs">
         <div className="flex justify-between items-center text-slate-700">
           <span className="font-semibold">
-            Total Item Count ({billingSummary.itemCount} items)
+            Total Item Count ({itemCount} {itemCount === 1 ? "item" : "items"})
           </span>
           <span className="font-bold text-slate-900 font-mono text-sm">
-            {billingSummary.itemCount}
+            {itemCount}
           </span>
         </div>
 
         <div className="flex justify-between items-center text-slate-600">
           <span>Subtotal</span>
           <span className="font-bold font-mono">
-            {formatCurrency(billingSummary.subtotal)}
+            {formatCurrency(subtotal)}
           </span>
         </div>
 
-        {billingSummary.discount > 0 && (
+        {discount > 0 && (
           <div className="flex justify-between items-center text-emerald-700 font-semibold bg-emerald-50 p-2 rounded-lg border border-emerald-200">
-            <span>Special Promotional Discount</span>
+            <span>Promotional Discount</span>
             <span className="font-bold font-mono">
-              -{formatCurrency(billingSummary.discount)}
+              -{formatCurrency(discount)}
             </span>
           </div>
         )}
 
         <div className="flex justify-between items-center text-slate-600">
-          <span>GST Rate ({billingSummary.gstRatePercent}%)</span>
+          <span>GST Rate (18%)</span>
           <span className="font-bold font-mono">
-            {formatCurrency(billingSummary.gstAmount)}
+            {formatCurrency(tax)}
           </span>
         </div>
 
@@ -77,7 +75,7 @@ export const BillingSummarySection: React.FC = () => {
             </span>
           </div>
           <span className="text-2xl font-black text-amber-600 font-mono tracking-tight">
-            {formatCurrency(billingSummary.finalPayableAmount)}
+            {formatCurrency(total)}
           </span>
         </div>
       </div>
@@ -86,7 +84,7 @@ export const BillingSummarySection: React.FC = () => {
         <button
           type="button"
           onClick={handleCheckout}
-          disabled={billingSummary.itemCount === 0}
+          disabled={itemCount === 0}
           className="w-full py-3.5 bg-sky-600 hover:bg-sky-500 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-extrabold text-sm rounded-xl transition-all shadow-sm flex items-center justify-center gap-2"
         >
           <CreditCard className="w-4 h-4" />
@@ -96,7 +94,7 @@ export const BillingSummarySection: React.FC = () => {
 
         <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400">
           <ShieldCheck className="w-3.5 h-3.5 text-sky-600" />
-          <span>Verified Weight & AI Double-Verification Secured</span>
+          <span>Verified Weight & Price Database Secured</span>
         </div>
       </div>
     </div>
