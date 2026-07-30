@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import SupermarketMap from "@/components/navigation/SupermarketMap";
+import DigitalSupermarketMap from "@/components/navigation/DigitalSupermarketMap";
 import ProductSearchMap from "@/components/navigation/ProductSearchMap";
 import { AisleData, catalogProducts } from "@/components/navigation/storeMapData";
 import { Product, ProductLocation } from "@/types";
@@ -56,6 +57,13 @@ export const StoreMapView: React.FC = () => {
         selectedProduct={selectedProduct}
         multiSelectedLocations={cartLocations}
         cartProducts={cartProducts}
+        onAisleSelect={handleAisleSelect}
+        onProductSelect={handleProductSelect}
+      />
+
+      {/* 2D ARCHITECTURAL DIGITAL SUPERMARKET MAP */}
+      <DigitalSupermarketMap
+        selectedAisleId={targetLocation}
         onAisleSelect={handleAisleSelect}
         onProductSelect={handleProductSelect}
       />

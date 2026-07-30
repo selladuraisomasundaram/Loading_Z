@@ -25,15 +25,189 @@ export interface StoreZoneData {
   description?: string;
 }
 
+export interface StoreBoundaryData {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  wallThickness: number;
+}
+
+export interface WalkableCorridorData {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  direction: "horizontal" | "vertical";
+}
+
+export interface MajorZoneData {
+  id: string;
+  name: string;
+  color: string;
+  badgeBg: string;
+  badgeText: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface CheckoutLaneData {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  status: "active" | "express";
+}
+
+export interface GatewayData {
+  id: string;
+  label: string;
+  type: "entry" | "exit";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface StoreMapDimensions {
   viewWidth: number;
   viewHeight: number;
+  boundaries: StoreBoundaryData;
 }
 
 export const storeMapConfig: StoreMapDimensions = {
   viewWidth: 900,
   viewHeight: 600,
+  boundaries: {
+    x: 40,
+    y: 40,
+    width: 820,
+    height: 540,
+    wallThickness: 6,
+  },
 };
+
+export const majorStoreZones: MajorZoneData[] = [
+  {
+    id: "ZONE_PRODUCE",
+    name: "Produce & Bakery Dept",
+    color: "#ecfdf5",
+    badgeBg: "#10b981",
+    badgeText: "#ffffff",
+    x: 60,
+    y: 60,
+    width: 370,
+    height: 130,
+  },
+  {
+    id: "ZONE_ORGANIC",
+    name: "Beverages & Organic Dept",
+    color: "#f0f9ff",
+    badgeBg: "#0284c7",
+    badgeText: "#ffffff",
+    x: 440,
+    y: 60,
+    width: 400,
+    height: 130,
+  },
+  {
+    id: "ZONE_PANTRY",
+    name: "Pantry & Instant Foods Dept",
+    color: "#fffbeb",
+    badgeBg: "#f59e0b",
+    badgeText: "#ffffff",
+    x: 60,
+    y: 210,
+    width: 780,
+    height: 130,
+  },
+  {
+    id: "ZONE_DAIRY",
+    name: "Dairy, Frozen & Household Dept",
+    color: "#fdf4ff",
+    badgeBg: "#a855f7",
+    badgeText: "#ffffff",
+    x: 60,
+    y: 360,
+    width: 780,
+    height: 130,
+  },
+];
+
+export const walkableCorridors: WalkableCorridorData[] = [
+  {
+    id: "MAIN_ENTRY_CORRIDOR",
+    name: "Main Entrance Concourse",
+    x: 60,
+    y: 490,
+    width: 780,
+    height: 70,
+    direction: "horizontal",
+  },
+  {
+    id: "ROW_A_CORRIDOR",
+    name: "Produce Walkway",
+    x: 60,
+    y: 170,
+    width: 780,
+    height: 40,
+    direction: "horizontal",
+  },
+  {
+    id: "ROW_B_CORRIDOR",
+    name: "Pantry Walkway",
+    x: 60,
+    y: 320,
+    width: 780,
+    height: 40,
+    direction: "horizontal",
+  },
+  {
+    id: "WEST_CORRIDOR",
+    name: "West Perimeter Aisle",
+    x: 50,
+    y: 60,
+    width: 30,
+    height: 430,
+    direction: "vertical",
+  },
+  {
+    id: "CENTRAL_CORRIDOR",
+    name: "Central Store Spine",
+    x: 430,
+    y: 60,
+    width: 30,
+    height: 430,
+    direction: "vertical",
+  },
+  {
+    id: "EAST_CORRIDOR",
+    name: "East Perimeter Aisle",
+    x: 790,
+    y: 60,
+    width: 30,
+    height: 430,
+    direction: "vertical",
+  },
+];
+
+export const checkoutLanes: CheckoutLaneData[] = [
+  { id: "LANE_1", label: "Lane 1", x: 500, y: 515, width: 35, height: 45, status: "express" },
+  { id: "LANE_2", label: "Lane 2", x: 545, y: 515, width: 35, height: 45, status: "active" },
+  { id: "LANE_3", label: "Lane 3", x: 590, y: 515, width: 35, height: 45, status: "active" },
+  { id: "LANE_4", label: "Lane 4", x: 635, y: 515, width: 35, height: 45, status: "express" },
+];
+
+export const entryExitGateways: GatewayData[] = [
+  { id: "GATEWAY_ENTRY", label: "ENTRY", type: "entry", x: 75, y: 515, width: 140, height: 45 },
+  { id: "GATEWAY_EXIT", label: "EXIT", type: "exit", x: 690, y: 515, width: 120, height: 45 },
+];
 
 export const storeAisles: AisleData[] = [
   // ROW A (Top Row)
