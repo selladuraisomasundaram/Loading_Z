@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
   CartItemType,
+  DetectionStatus,
   GemmaDetectionResult,
   LoadCellTelemetryData,
   Product,
@@ -26,7 +27,8 @@ export interface CartStoreState {
   tax: number;
   total: number;
 
-  // Image & Vision Analysis State
+  // Vision Analysis & Product Detection State Machine
+  detectionStatus: DetectionStatus;
   selectedFile: File | null;
   uploadedImage: string | null;
   uploadedFileName: string | null;
@@ -43,7 +45,7 @@ export interface CartStoreState {
   isRecommendationsLoading: boolean;
 
   // Actions
-  selectFile: (file: File) => boolean; // Returns true if valid file selected
+  selectFile: (file: File) => boolean;
   removeImage: () => void;
   analyzeSelectedFile: () => Promise<void>;
   addGemmaResultToCart: () => void;
@@ -61,7 +63,7 @@ export interface CartStoreState {
 const initialMockCartItems: CartItemType[] = [
   {
     product: {
-      id: "prod-101",
+      id: "SKU-000101",
       name: "Organic Whole Milk 1L",
       brand: "Amul Fresh",
       category: "Dairy & Eggs",
@@ -73,7 +75,7 @@ const initialMockCartItems: CartItemType[] = [
   },
   {
     product: {
-      id: "prod-102",
+      id: "SKU-000102",
       name: "Multigrain Sourdough Bread",
       brand: "Modern Bakery",
       category: "Bakery",
@@ -89,7 +91,7 @@ const initialRecommendations: RecommendationItem[] = [
   {
     id: "rec-01",
     product: {
-      id: "prod-rec-01",
+      id: "SKU-000201",
       name: "Unsalted Creamery Butter 200g",
       brand: "Amul",
       category: "Dairy",
@@ -101,7 +103,7 @@ const initialRecommendations: RecommendationItem[] = [
   {
     id: "rec-02",
     product: {
-      id: "prod-rec-02",
+      id: "SKU-000202",
       name: "Classic Roasted Oats 500g",
       brand: "Quaker",
       category: "Breakfast Cereal",
@@ -113,7 +115,7 @@ const initialRecommendations: RecommendationItem[] = [
   {
     id: "rec-03",
     product: {
-      id: "prod-rec-03",
+      id: "SKU-000203",
       name: "Organic Honey 250g",
       brand: "Dabur",
       category: "Pantry",
@@ -159,6 +161,8 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
   tax: initialTotals.tax,
   total: initialTotals.total,
 
+  // Initial State Machine
+  detectionStatus: "success",
   selectedFile: null,
   uploadedImage: null,
   uploadedFileName: null,
@@ -166,13 +170,15 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
   fileError: null,
   isAnalyzing: false,
   gemmaResult: {
-    productName: "Dark Chocolate Almond Bar 100g",
-    brand: "Lindt Excellence",
-    category: "Confectionery",
-    confidence: 0.964,
-    estimatedWeightGrams: 105,
-    verificationStatus: "Verified",
-    suggestedPrice: 150.0,
+    product_id: "SKU-000123",
+    product_name: "Maggi Noodles 2-Min",
+    brand: "Nestle",
+    category: "Snacks",
+    sub_category: "Instant Foods",
+    price: 14.0,
+    confidence: 0.96,
+    verified: true,
+    estimatedWeightGrams: 70,
     detectedAt: new Date().toLocaleTimeString(),
   },
 
@@ -187,7 +193,7 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
   recommendations: initialRecommendations,
   isRecommendationsLoading: false,
 
-  // Select file & validate format (accept JPG, JPEG, PNG, WEBP)
+  // State machine transition: uploading -> ready
   selectFile: (file: File) => {
     const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
     const isValidType =
@@ -196,10 +202,13 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
 
     if (!isValidType) {
       set({
+        detectionStatus: "error",
         fileError: `Unsupported file type "${file.name}". Please upload a JPG, JPEG, PNG, or WEBP image.`,
       });
       return false;
     }
+
+    set({ detectionStatus: "uploading", fileError: null });
 
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -209,6 +218,7 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
         uploadedFileName: file.name,
         uploadedFileSize: file.size,
         fileError: null,
+        detectionStatus: "idle",
       });
     };
     reader.readAsDataURL(file);
@@ -223,31 +233,38 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
       uploadedFileSize: null,
       fileError: null,
       gemmaResult: null,
+      detectionStatus: "idle",
     });
   },
 
-  // Calls identifyProduct(file) abstraction layer
+  // State machine transition: analyzing -> success / error
   analyzeSelectedFile: async () => {
     const { selectedFile, uploadedImage } = get();
     if (!selectedFile && !uploadedImage) {
-      set({ fileError: "Please upload an image before analyzing." });
+      set({
+        detectionStatus: "error",
+        fileError: "Please upload an image before analyzing.",
+      });
       return;
     }
 
-    set({ isAnalyzing: true, fileError: null });
+    set({
+      detectionStatus: "analyzing",
+      isAnalyzing: true,
+      fileError: null,
+    });
 
     try {
-      // Use selected file or create dummy file fallback if loaded from initial state
       const targetFile =
         selectedFile ||
-        new File(["dummy"], "product.jpg", { type: "image/jpeg" });
+        new File(["dummy"], "maggi_noodles.jpg", { type: "image/jpeg" });
 
-      // Call API abstraction function
       const result = await identifyProduct(targetFile);
 
       set({
         gemmaResult: result,
         isAnalyzing: false,
+        detectionStatus: "success",
       });
     } catch (err: unknown) {
       const errorMessage =
@@ -255,6 +272,7 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
       set({
         fileError: errorMessage,
         isAnalyzing: false,
+        detectionStatus: "error",
       });
     }
   },
@@ -264,11 +282,11 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
     if (!gemmaResult) return;
 
     const product: Product = {
-      id: `prod-gemma-${Date.now()}`,
-      name: gemmaResult.productName,
+      id: gemmaResult.product_id,
+      name: gemmaResult.product_name,
       brand: gemmaResult.brand,
-      category: gemmaResult.category,
-      price: gemmaResult.suggestedPrice,
+      category: `${gemmaResult.category} / ${gemmaResult.sub_category}`,
+      price: gemmaResult.price,
       weightGrams: gemmaResult.estimatedWeightGrams,
     };
 

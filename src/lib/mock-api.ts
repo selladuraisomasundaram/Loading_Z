@@ -1,57 +1,48 @@
 import { GemmaDetectionResult } from "@/types";
 
-const mockVisionCatalog: GemmaDetectionResult[] = [
+const mockVisionCatalog: Omit<GemmaDetectionResult, "detectedAt">[] = [
   {
-    productName: "Almond Milk Unsweetened 1L",
+    product_id: "SKU-000123",
+    product_name: "Maggi Noodles 2-Min",
+    brand: "Nestle",
+    category: "Snacks",
+    sub_category: "Instant Foods",
+    price: 14.0,
+    confidence: 0.96,
+    verified: true,
+    estimatedWeightGrams: 70,
+  },
+  {
+    product_id: "SKU-000456",
+    product_name: "Almond Milk Unsweetened 1L",
     brand: "Silk Fresh",
-    category: "Dairy Alternatives",
-    confidence: 0.982,
+    category: "Beverages",
+    sub_category: "Dairy Alternatives",
+    price: 190.0,
+    confidence: 0.98,
+    verified: true,
     estimatedWeightGrams: 1020,
-    verificationStatus: "Verified",
-    suggestedPrice: 190.0,
-    detectedAt: "",
   },
   {
-    productName: "Organic Greek Yogurt 500g",
-    brand: "Epigamia",
-    category: "Dairy",
-    confidence: 0.958,
-    estimatedWeightGrams: 515,
-    verificationStatus: "Verified",
-    suggestedPrice: 125.0,
-    detectedAt: "",
-  },
-  {
-    productName: "Dark Chocolate Almond Bar 100g",
+    product_id: "SKU-000789",
+    product_name: "Dark Chocolate Almond Bar 100g",
     brand: "Lindt Excellence",
-    category: "Confectionery",
-    confidence: 0.964,
+    category: "Snacks",
+    sub_category: "Confectionery",
+    price: 150.0,
+    confidence: 0.94,
+    verified: true,
     estimatedWeightGrams: 105,
-    verificationStatus: "Verified",
-    suggestedPrice: 150.0,
-    detectedAt: "",
-  },
-  {
-    productName: "Extra Virgin Olive Oil 500ml",
-    brand: "Borges",
-    category: "Pantry & Oils",
-    confidence: 0.941,
-    estimatedWeightGrams: 520,
-    verificationStatus: "Verified",
-    suggestedPrice: 420.0,
-    detectedAt: "",
   },
 ];
 
 /**
  * Mock API service simulating Vision AI inference on uploaded image files.
- * Provides a 1.2-second network delay.
+ * Provides a 1.2-second network latency simulation.
  */
 export async function mockIdentifyProduct(file: File): Promise<GemmaDetectionResult> {
-  // Simulate network latency
   await new Promise((resolve) => setTimeout(resolve, 1200));
 
-  // Pick a catalog item deterministically based on file name length or random fallback
   const index = Math.abs(file.name.length) % mockVisionCatalog.length;
   const match = mockVisionCatalog[index] ?? mockVisionCatalog[0]!;
 

@@ -10,6 +10,7 @@ export function useCart() {
   const tax = useCartStore((state) => state.tax);
   const total = useCartStore((state) => state.total);
 
+  const detectionStatus = useCartStore((state) => state.detectionStatus);
   const selectedFile = useCartStore((state) => state.selectedFile);
   const uploadedImage = useCartStore((state) => state.uploadedImage);
   const uploadedFileName = useCartStore((state) => state.uploadedFileName);
@@ -48,6 +49,7 @@ export function useCart() {
     discount,
     tax,
     total,
+    detectionStatus,
     selectedFile,
     uploadedImage,
     uploadedFileName,

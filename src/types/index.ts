@@ -1,3 +1,5 @@
+export type DetectionStatus = "idle" | "uploading" | "analyzing" | "success" | "error";
+
 export interface Product {
   id: string;
   name: string;
@@ -16,13 +18,16 @@ export interface CartItemType {
 }
 
 export interface GemmaDetectionResult {
-  productName: string;
+  product_id: string;
+  product_name: string;
   brand: string;
   category: string;
-  confidence: number;
+  sub_category: string;
+  price: number;
+  confidence: number; // e.g. 0.96 (96%)
+  verified: boolean;
   estimatedWeightGrams: number;
-  verificationStatus: "Verified" | "Pending Weight Check" | "Unverified";
-  suggestedPrice: number; // Catalog price from verified product lookup
+  imageUrl?: string;
   detectedAt: string;
 }
 
