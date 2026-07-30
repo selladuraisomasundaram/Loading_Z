@@ -1,4 +1,6 @@
-# Smart Trolley Frontend Application
+# Loading_Z - Smart Trolley Frontend Application
+
+Gemma AI enabled Smart OS System for Smart Trolley System — **Frontend Application Layer**.
 
 Independent, client-side Next.js + TypeScript + Tailwind CSS application for a hackathon Smart Shopping Trolley ecosystem.
 
