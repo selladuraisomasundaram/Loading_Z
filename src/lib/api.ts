@@ -29,11 +29,7 @@ const isMockMode = (): boolean => {
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
-<<<<<<< Updated upstream
-  timeoutMs = 8000
-=======
   timeoutMs = 120000 // 120 seconds timeout to accommodate local Gemma AI vision & LLM processing
->>>>>>> Stashed changes
 ): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
