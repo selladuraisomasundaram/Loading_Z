@@ -58,7 +58,7 @@ export const RecommendationsSection: React.FC = () => {
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1 custom-scrollbar">
           {recommendations.map((item) => (
             <div
               key={item.id}

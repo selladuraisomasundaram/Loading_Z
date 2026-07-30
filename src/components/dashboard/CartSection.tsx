@@ -59,7 +59,7 @@ export const CartSection: React.FC = () => {
             <span>Optimize Multi-Product Route on Map</span>
           </button>
 
-          <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
+          <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1 custom-scrollbar">
             {items.map((item) => (
               <CartItem key={item.product.id} item={item} />
             ))}
