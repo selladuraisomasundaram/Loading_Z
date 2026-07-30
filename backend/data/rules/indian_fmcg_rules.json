@@ -1,0 +1,12 @@
+{
+  "maggi": ["ketchup", "cheese slices", "chilli sauce", "soft drink"],
+  "noodles": ["ketchup", "cheese slices", "chilli sauce", "soft drink"],
+  "atta": ["ghee", "mustard oil", "salt", "paneer"],
+  "flour": ["ghee", "mustard oil", "salt", "paneer"],
+  "tea": ["marie biscuits", "sugar", "condensed milk", "rusk"],
+  "chai": ["marie biscuits", "sugar", "condensed milk", "rusk"],
+  "rice": ["toor dal", "ghee", "sambar powder", "papad"],
+  "toothpaste": ["toothbrush", "mouthwash", "tongue cleaner"],
+  "soap": ["handwash", "conditioner", "body wash"],
+  "shampoo": ["handwash", "conditioner", "body wash"]
+}
