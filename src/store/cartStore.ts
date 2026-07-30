@@ -57,6 +57,10 @@ export interface CartStoreState {
   // Load Cell Animation state
   animationInterval: NodeJS.Timeout | null;
 
+  // Assistant Map Target State
+  assistantTargetProduct: Product | null;
+  setAssistantTargetProduct: (product: Product | null) => void;
+
   // Actions
   selectFile: (file: File) => boolean;
   removeImage: () => void;
@@ -139,6 +143,9 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
   isRecommendationsLoading: false,
 
   animationInterval: null,
+  
+  assistantTargetProduct: null,
+  setAssistantTargetProduct: (product: Product | null) => set({ assistantTargetProduct: product }),
 
   selectFile: (file: File) => {
     const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();

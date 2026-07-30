@@ -13,8 +13,9 @@ const LeafletStoreMap = dynamic(() => import("@/components/navigation/LeafletSto
 });
 
 export const StoreMapView: React.FC = () => {
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const { items } = useCart();
+  const { items, assistantTargetProduct, setAssistantTargetProduct } = useCart();
+  const selectedProduct = assistantTargetProduct;
+  const setSelectedProduct = setAssistantTargetProduct;
   
   const [gemmaInsight, setGemmaInsight] = useState<string | null>(null);
   const [isOptimizing, setIsOptimizing] = useState(false);

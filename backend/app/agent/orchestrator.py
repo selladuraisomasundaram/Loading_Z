@@ -168,5 +168,7 @@ async def orchestrate_message(message: str) -> Dict[str, Any]:
         "text": response_text,
         "timestamp": timestamp_str,
         "toolActivity": tool_activity,
-        "targetAisle": target_aisle
+        "targetAisle": target_aisle,
+        "targetProductId": product_name, # using name as ID since we don't always have strict SKU in assistant
+        "targetProductName": product_name
     }

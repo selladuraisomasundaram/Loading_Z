@@ -18,6 +18,7 @@ export interface ChatMessage {
   toolActivity?: ToolStep[];
   targetAisle?: string;
   targetProductId?: string;
+  targetProductName?: string;
   webSearchUsed?: boolean;
   webSearchResults?: WebSearchPayload;
 }

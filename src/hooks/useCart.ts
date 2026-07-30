@@ -36,6 +36,8 @@ export function useCart() {
   const increaseQuantity = useCartStore((state) => state.increaseQuantity);
   const decreaseQuantity = useCartStore((state) => state.decreaseQuantity);
   const clearCart = useCartStore((state) => state.clearCart);
+  const assistantTargetProduct = useCartStore((state) => state.assistantTargetProduct);
+  const setAssistantTargetProduct = useCartStore((state) => state.setAssistantTargetProduct);
 
   const selectFile = useCartStore((state) => state.selectFile);
   const removeImage = useCartStore((state) => state.removeImage);
@@ -80,6 +82,8 @@ export function useCart() {
     increaseQuantity,
     decreaseQuantity,
     clearCart,
+    assistantTargetProduct,
+    setAssistantTargetProduct,
     selectFile,
     removeImage,
     analyzeSelectedFile,

@@ -5,8 +5,6 @@ import {
   Bot,
   User,
   Send,
-  Mic,
-  MicOff,
   Sparkles,
   MapPin,
   Loader2,
@@ -21,7 +19,7 @@ export interface ChatWindowProps {
 }
 
 export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
-  const { setActiveTab } = useCart();
+  const { setActiveTab, setAssistantTargetProduct } = useCart();
   const [isMicActive, setIsMicActive] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -97,6 +95,19 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
     try {
       const botResponse = await sendChatMessage(textToSend);
       setMessages((prev) => [...prev, botResponse]);
+      
+      if (botResponse.targetAisle || botResponse.targetProductId) {
+        setAssistantTargetProduct({
+          id: botResponse.targetProductId || "assistant-item",
+          name: botResponse.targetProductName || "Searched Item",
+          price: 0,
+          weightGrams: 0,
+          category: "Assistant Search",
+          aisleId: botResponse.targetAisle
+        });
+        setActiveTab("map");
+      }
+      
       onSelectMessage?.(botResponse);
     } catch {
       const errorMsg: ChatMessage = {
