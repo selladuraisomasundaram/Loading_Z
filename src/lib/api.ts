@@ -23,7 +23,7 @@ const isMockMode = (): boolean => {
   if (mockSetting !== undefined) {
     return mockSetting === "true";
   }
-  return true;
+  return false;
 };
 
 async function fetchWithTimeout(
