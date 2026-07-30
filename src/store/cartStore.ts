@@ -1,84 +1,195 @@
 import { create } from "zustand";
 import {
   CartItemType,
-  DetectedProduct,
-  LoadCellData,
+  GemmaDetectionResult,
+  LoadCellTelemetryData,
   Product,
-  TrolleyStatus,
+  RecommendationItem,
 } from "@/types";
 
 interface CartStoreState {
+  // Cart
   items: CartItemType[];
-  detectedProducts: DetectedProduct[];
-  loadCell: LoadCellData;
-  trolleyStatus: TrolleyStatus;
+
+  // Image Upload & Vision Analysis
+  uploadedImage: string | null; // Data URL or Object URL
+  uploadedFileName: string | null;
+  isAnalyzing: boolean;
+  gemmaResult: GemmaDetectionResult | null;
+
+  // Load Cell Telemetry
+  loadCell: LoadCellTelemetryData;
+
+  // Recommendations
+  recommendations: RecommendationItem[];
+  isRecommendationsLoading: boolean;
 
   // Actions
+  uploadImage: (file: File) => void;
+  removeImage: () => void;
+  analyzeImage: () => void;
+  addGemmaResultToCart: () => void;
+
   addItem: (product: Product, quantity?: number) => void;
   removeItem: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
-  setDetectedProducts: (products: DetectedProduct[]) => void;
-  updateLoadCell: (weightGrams: number) => void;
-  setTrolleyStatus: (status: Partial<TrolleyStatus>) => void;
+
+  addRecommendationToCart: (recId: string) => void;
+  updateLoadCellWeight: (weightGrams: number, isStable?: boolean) => void;
 }
 
-const initialMockProducts: CartItemType[] = [
+const initialMockCart: CartItemType[] = [
   {
     product: {
-      id: "prod-001",
-      name: "Organic Whole Milk (1L)",
-      price: 3.49,
-      weightGrams: 1020,
-      category: "Dairy",
+      id: "prod-101",
+      name: "Organic Whole Milk 1L",
+      brand: "Amul Fresh",
+      category: "Dairy & Eggs",
+      price: 68.0,
+      weightGrams: 1030,
     },
     quantity: 2,
     addedAt: new Date().toISOString(),
   },
   {
     product: {
-      id: "prod-002",
-      name: "Artisan Sourdough Bread",
-      price: 4.99,
-      weightGrams: 500,
+      id: "prod-102",
+      name: "Multigrain Sourdough Bread",
+      brand: "Modern Bakery",
       category: "Bakery",
+      price: 45.0,
+      weightGrams: 400,
     },
     quantity: 1,
     addedAt: new Date().toISOString(),
   },
 ];
 
-export const useCartStore = create<CartStoreState>((set, get) => ({
-  items: initialMockProducts,
-  detectedProducts: [
-    {
-      id: "det-101",
-      label: "Red Gala Apple",
-      confidence: 0.94,
-      estimatedWeightGrams: 180,
-      detectedAt: new Date().toISOString(),
-      status: "pending_verification",
+const initialRecommendations: RecommendationItem[] = [
+  {
+    id: "rec-01",
+    product: {
+      id: "prod-rec-01",
+      name: "Unsalted Creamery Butter 200g",
+      brand: "Amul",
+      category: "Dairy",
+      price: 58.0,
+      weightGrams: 200,
     },
-  ],
-  loadCell: {
-    currentWeightGrams: 2540,
-    expectedWeightGrams: 2540,
-    weightDeltaGrams: 0,
-    isTareActive: false,
-    isWeightMismatch: false,
-    lastUpdated: new Date().toISOString(),
+    reason: "Frequently bought together with Sourdough Bread",
   },
-  trolleyStatus: {
-    trolleyId: "TROLLEY-SMART-042",
-    batteryLevelPercent: 88,
-    mqttConnection: "connected",
-    cameraConnection: "connected",
-    loadCellConnection: "connected",
-    lastHeartbeat: new Date().toISOString(),
+  {
+    id: "rec-02",
+    product: {
+      id: "prod-rec-02",
+      name: "Classic Roasted Oats 500g",
+      brand: "Quaker",
+      category: "Breakfast Cereal",
+      price: 185.0,
+      weightGrams: 500,
+    },
+    reason: "Popular healthy breakfast choice",
+  },
+  {
+    id: "rec-03",
+    product: {
+      id: "prod-rec-03",
+      name: "Organic Honey 250g",
+      brand: "Dabur",
+      category: "Pantry",
+      price: 140.0,
+      weightGrams: 250,
+    },
+    reason: "Pairs naturally with Oats & Milk",
+  },
+];
+
+export const useCartStore = create<CartStoreState>((set, get) => ({
+  items: initialMockCart,
+
+  uploadedImage: null,
+  uploadedFileName: null,
+  isAnalyzing: false,
+  gemmaResult: {
+    productName: "Dark Chocolate Almond Bar 100g",
+    brand: "Lindt Excellence",
+    category: "Confectionery",
+    confidence: 0.964,
+    estimatedWeightGrams: 105,
+    verificationStatus: "Verified",
+    suggestedPrice: 150.0,
+    detectedAt: new Date().toLocaleTimeString(),
+  },
+
+  loadCell: {
+    currentWeightGrams: 2460,
+    expectedWeightGrams: 2460,
+    isStable: true,
+    statusText: "Stable",
+    lastUpdated: "Just now",
+  },
+
+  recommendations: initialRecommendations,
+  isRecommendationsLoading: false,
+
+  uploadImage: (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      set({
+        uploadedImage: e.target?.result as string,
+        uploadedFileName: file.name,
+      });
+    };
+    reader.readAsDataURL(file);
+  },
+
+  removeImage: () => {
+    set({
+      uploadedImage: null,
+      uploadedFileName: null,
+      gemmaResult: null,
+    });
+  },
+
+  analyzeImage: () => {
+    set({ isAnalyzing: true });
+    setTimeout(() => {
+      const mockResult: GemmaDetectionResult = {
+        productName: "Almond Milk Unsweetened 1L",
+        brand: "Silk Fresh",
+        category: "Dairy Alternatives",
+        confidence: 0.982,
+        estimatedWeightGrams: 1020,
+        verificationStatus: "Verified",
+        suggestedPrice: 190.0,
+        detectedAt: new Date().toLocaleTimeString(),
+      };
+      set({
+        isAnalyzing: false,
+        gemmaResult: mockResult,
+      });
+    }, 1500);
+  },
+
+  addGemmaResultToCart: () => {
+    const { gemmaResult } = get();
+    if (!gemmaResult) return;
+
+    const product: Product = {
+      id: `prod-gemma-${Date.now()}`,
+      name: gemmaResult.productName,
+      brand: gemmaResult.brand,
+      category: gemmaResult.category,
+      price: gemmaResult.suggestedPrice,
+      weightGrams: gemmaResult.estimatedWeightGrams,
+    };
+
+    get().addItem(product);
   },
 
   addItem: (product: Product, quantity = 1) => {
-    const { items } = get();
+    const { items, loadCell } = get();
     const existingIndex = items.findIndex((i) => i.product.id === product.id);
 
     let updatedItems: CartItemType[];
@@ -100,36 +211,38 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
       0
     );
 
-    set((state) => ({
+    set({
       items: updatedItems,
       loadCell: {
-        ...state.loadCell,
+        ...loadCell,
+        currentWeightGrams: expectedWeight,
         expectedWeightGrams: expectedWeight,
-        weightDeltaGrams: state.loadCell.currentWeightGrams - expectedWeight,
-        isWeightMismatch:
-          Math.abs(state.loadCell.currentWeightGrams - expectedWeight) > 50,
+        isStable: true,
+        statusText: "Stable",
+        lastUpdated: new Date().toLocaleTimeString(),
       },
-    }));
+    });
   },
 
   removeItem: (productId: string) => {
-    const { items } = get();
+    const { items, loadCell } = get();
     const updatedItems = items.filter((i) => i.product.id !== productId);
     const expectedWeight = updatedItems.reduce(
       (acc, curr) => acc + curr.product.weightGrams * curr.quantity,
       0
     );
 
-    set((state) => ({
+    set({
       items: updatedItems,
       loadCell: {
-        ...state.loadCell,
+        ...loadCell,
+        currentWeightGrams: expectedWeight,
         expectedWeightGrams: expectedWeight,
-        weightDeltaGrams: state.loadCell.currentWeightGrams - expectedWeight,
-        isWeightMismatch:
-          Math.abs(state.loadCell.currentWeightGrams - expectedWeight) > 50,
+        isStable: true,
+        statusText: "Stable",
+        lastUpdated: new Date().toLocaleTimeString(),
       },
-    }));
+    });
   },
 
   updateQuantity: (productId: string, quantity: number) => {
@@ -138,7 +251,7 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
       return;
     }
 
-    const { items } = get();
+    const { items, loadCell } = get();
     const updatedItems = items.map((item) =>
       item.product.id === productId ? { ...item, quantity } : item
     );
@@ -148,16 +261,17 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
       0
     );
 
-    set((state) => ({
+    set({
       items: updatedItems,
       loadCell: {
-        ...state.loadCell,
+        ...loadCell,
+        currentWeightGrams: expectedWeight,
         expectedWeightGrams: expectedWeight,
-        weightDeltaGrams: state.loadCell.currentWeightGrams - expectedWeight,
-        isWeightMismatch:
-          Math.abs(state.loadCell.currentWeightGrams - expectedWeight) > 50,
+        isStable: true,
+        statusText: "Stable",
+        lastUpdated: new Date().toLocaleTimeString(),
       },
-    }));
+    });
   },
 
   clearCart: () => {
@@ -165,38 +279,31 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
       items: [],
       loadCell: {
         ...state.loadCell,
-        expectedWeightGrams: 0,
         currentWeightGrams: 0,
-        weightDeltaGrams: 0,
-        isWeightMismatch: false,
+        expectedWeightGrams: 0,
+        isStable: true,
+        statusText: "Stable",
+        lastUpdated: new Date().toLocaleTimeString(),
       },
     }));
   },
 
-  setDetectedProducts: (products: DetectedProduct[]) => {
-    set({ detectedProducts: products });
+  addRecommendationToCart: (recId: string) => {
+    const { recommendations } = get();
+    const target = recommendations.find((r) => r.id === recId);
+    if (target) {
+      get().addItem(target.product);
+    }
   },
 
-  updateLoadCell: (weightGrams: number) => {
-    set((state) => {
-      const delta = weightGrams - state.loadCell.expectedWeightGrams;
-      return {
-        loadCell: {
-          ...state.loadCell,
-          currentWeightGrams: weightGrams,
-          weightDeltaGrams: delta,
-          isWeightMismatch: Math.abs(delta) > 50,
-          lastUpdated: new Date().toISOString(),
-        },
-      };
-    });
-  },
-
-  setTrolleyStatus: (status: Partial<TrolleyStatus>) => {
+  updateLoadCellWeight: (weightGrams: number, isStable = true) => {
     set((state) => ({
-      trolleyStatus: {
-        ...state.trolleyStatus,
-        ...status,
+      loadCell: {
+        ...state.loadCell,
+        currentWeightGrams: weightGrams,
+        isStable,
+        statusText: isStable ? "Stable" : "Measuring...",
+        lastUpdated: new Date().toLocaleTimeString(),
       },
     }));
   },

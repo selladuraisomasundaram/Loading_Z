@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Smart Trolley Dashboard",
-  description: "Independent Hackathon Frontend for Smart Shopping Trolley",
+  title: "Smart Trolley OS - Agaram Acolytes",
+  description: "Light human-designed Smart Trolley application dashboard for Team Agaram Acolytes",
 };
 
 export default function RootLayout({
@@ -12,8 +12,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body className="bg-slate-950 text-slate-100 antialiased min-h-screen">
+    <html lang="en">
+      <body className="bg-slate-100 text-slate-900 antialiased min-h-screen">
         {children}
       </body>
     </html>

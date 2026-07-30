@@ -4,6 +4,7 @@ export interface Product {
   price: number;
   weightGrams: number;
   category: string;
+  brand?: string;
   imageUrl?: string;
   barcode?: string;
 }
@@ -14,49 +15,47 @@ export interface CartItemType {
   addedAt: string;
 }
 
-export interface DetectedProduct {
-  id: string;
-  label: string;
-  confidence: number;
+export interface GemmaDetectionResult {
+  productName: string;
+  brand: string;
+  category: string;
+  confidence: number; // e.g. 0.96 (96%)
   estimatedWeightGrams: number;
-  boundingCircle?: { x: number; y: number; radius: number };
+  verificationStatus: "Verified" | "Pending Weight Check" | "Unverified";
+  suggestedPrice: number;
   detectedAt: string;
-  status: "pending_verification" | "verified" | "rejected";
 }
 
-export interface LoadCellData {
+export interface LoadCellTelemetryData {
   currentWeightGrams: number;
   expectedWeightGrams: number;
-  weightDeltaGrams: number;
-  isTareActive: boolean;
-  isWeightMismatch: boolean;
+  isStable: boolean;
+  statusText: "Stable" | "Measuring..." | "Unstable / Calibrating";
   lastUpdated: string;
 }
 
 export type ConnectionStatus = "connected" | "connecting" | "disconnected" | "error";
 
-export interface TrolleyStatus {
-  trolleyId: string;
-  batteryLevelPercent: number;
-  mqttConnection: ConnectionStatus;
-  cameraConnection: ConnectionStatus;
-  loadCellConnection: ConnectionStatus;
-  lastHeartbeat: string;
+export interface HeaderStatusData {
+  teamName: string;
+  gemmaModelStatus: "online" | "loading" | "offline";
+  gemmaModelName: string;
+  backendConnection: ConnectionStatus;
+  backendName: string;
 }
 
-export interface BillingSummaryData {
-  subtotal: number;
-  tax: number;
-  discount: number;
-  total: number;
-  currency: string;
+export interface GSTBillingSummaryData {
   itemCount: number;
+  subtotal: number;
+  discount: number;
+  gstRatePercent: number; // e.g. 18%
+  gstAmount: number;
+  finalPayableAmount: number;
+  currency: string;
 }
 
-export interface Recommendation {
+export interface RecommendationItem {
   id: string;
-  title: string;
+  product: Product;
   reason: string;
-  suggestedProduct: Product;
-  discountPercentage?: number;
 }
