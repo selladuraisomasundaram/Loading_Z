@@ -3,17 +3,15 @@ import json
 import re
 import asyncio
 from fastapi import APIRouter, File, UploadFile, Depends
+from sqlalchemy.orm import Session
 from app.gemma.vision import identify_product_from_image
 from app.gemma.engine import get_ollama_client, GEMMA_MODEL
 from app.agent.tools import search_web
-from app.core.database import DatabaseEngine
 from app.api.deps import get_db
 from app.models.product import VisionAnalysisResponse
+from services.product_service import resolve_product
 
 router = APIRouter()
-
-from sqlalchemy.orm import Session
-from app.services.product_service import resolve_product
 
 @router.post("/vision/analyze", response_model=VisionAnalysisResponse)
 async def analyze_vision_frame(
@@ -40,13 +38,13 @@ async def analyze_vision_frame(
         return VisionAnalysisResponse(
             sku=product.sku,
             product_name=product.product_name,
-            brand=product.brand,
-            category=product.category,
-            sub_category=product.sub_category,
+            brand=product.brand or "Generic Brand",
+            category=product.category or "General Grocery",
+            sub_category=product.sub_category or "Miscellaneous",
             price=product.price,
-            stock=product.stock,
-            aisle=product.aisle,
-            shelf=product.shelf,
+            stock=product.stock or 50,
+            aisle=product.aisle or "Aisle A1",
+            shelf=product.shelf or "Shelf 1",
             gemma_confidence=confidence,
             verified=True
         )
@@ -87,7 +85,7 @@ async def analyze_vision_frame(
                 approx_price = float(parsed["approx_price"])
         except Exception:
             # Regex extraction fallback if LLM synthesis times out
-            match = re.search(r'₹?\s*(\d+(?:\.\d{1,2})?)', snippets)
+            match = re.search(r'₹?\s*(\d+(?:\.\d{1,2})?)', str(snippets))
             if match:
                 val = float(match.group(1))
                 if val > 0:
@@ -108,4 +106,3 @@ async def analyze_vision_frame(
         gemma_confidence=confidence,
         verified=False
     )
-

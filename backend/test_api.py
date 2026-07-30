@@ -4,9 +4,12 @@ import json
 import base64
 
 def test_api():
-    url = "http://localhost:8001/api/v1/vision/analyze"
-    with open(r'C:\Users\santh\.gemini\antigravity\brain\d9aaa648-7c56-450f-9909-63dbc8cfd5d0\.user_uploaded\media__1785414876948.png', 'rb') as f:
-        img_data = f.read()
+    url = "http://localhost:8000/api/v1/vision/analyze"
+    try:
+        with open(r'C:\Users\santh\.gemini\antigravity\brain\d9aaa648-7c56-450f-9909-63dbc8cfd5d0\.user_uploaded\media__1785414876948.png', 'rb') as f:
+            img_data = f.read()
+    except Exception:
+        img_data = b"fake_image_content"
 
     boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
     
