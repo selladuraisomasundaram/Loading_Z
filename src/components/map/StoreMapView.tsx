@@ -1,41 +1,28 @@
 "use client";
 
 import React, { useState } from "react";
-import SupermarketMap from "@/components/navigation/SupermarketMap";
 import DigitalSupermarketMap from "@/components/navigation/DigitalSupermarketMap";
 import ProductSearchMap from "@/components/navigation/ProductSearchMap";
 import { AisleData, catalogProducts } from "@/components/navigation/storeMapData";
-import { Product, ProductLocation } from "@/types";
-import { useCart } from "@/hooks/useCart";
+import { Product } from "@/types";
 
 export const StoreMapView: React.FC = () => {
-  const { items } = useCart();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(
     catalogProducts[0] || null
   );
   const [targetLocation, setTargetLocation] = useState("A3");
 
-  // Extract products in active cart for TSP optimization
-  const cartProducts: Product[] = items.map((i) => i.product);
-
-  const cartLocations: ProductLocation[] = items
-    .map((item) => {
-      const match = catalogProducts.find((p) => p.id === item.product.id);
-      return match?.location;
-    })
-    .filter((loc): loc is ProductLocation => Boolean(loc));
-
-  const handleProductSelect = (product: Product) => {
+  const handleProductSelect = (product: Product | null) => {
     setSelectedProduct(product);
-    if (product.location?.aisleId) {
-      setTargetLocation(product.location.aisleId);
+    if (product?.location?.aisleId || product?.aisleId) {
+      setTargetLocation(product.location?.aisleId || product.aisleId || "A3");
     }
   };
 
   const handleAisleSelect = (aisle: AisleData) => {
     setTargetLocation(aisle.id);
     const firstMatch = catalogProducts.find(
-      (p) => p.location?.aisleId === aisle.id
+      (p) => p.location?.aisleId === aisle.id || p.aisleId === aisle.id
     );
     if (firstMatch) {
       setSelectedProduct(firstMatch);
@@ -44,26 +31,16 @@ export const StoreMapView: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      {/* PRODUCT LOCATION SEARCH CARD */}
+      {/* PRODUCT LOCATION SEARCH BAR */}
       <ProductSearchMap
         onSelectProduct={handleProductSelect}
         selectedProduct={selectedProduct}
         onClearSelection={() => setSelectedProduct(null)}
       />
 
-      {/* PHASE 4 INTERACTIVE SUPERMARKET MAP WITH TSP ROUTE OPTIMIZATION */}
-      <SupermarketMap
-        initialSelectedAisleId={targetLocation}
-        selectedProduct={selectedProduct}
-        multiSelectedLocations={cartLocations}
-        cartProducts={cartProducts}
-        onAisleSelect={handleAisleSelect}
-        onProductSelect={handleProductSelect}
-      />
-
-      {/* 2D ARCHITECTURAL DIGITAL SUPERMARKET MAP */}
+      {/* AUTHORITATIVE INTERACTIVE DIGITAL SUPERMARKET FLOOR MAP */}
       <DigitalSupermarketMap
-        selectedAisleId={targetLocation}
+        initialSelectedAisleId={targetLocation}
         selectedProduct={selectedProduct}
         onAisleSelect={handleAisleSelect}
         onProductSelect={handleProductSelect}
