@@ -9,8 +9,8 @@ from PIL import Image
 from app.gemma.engine import get_ollama_client, GEMMA_MODEL
 
 SYSTEM_INSTRUCTION = (
-    "Extract the exact product name and brand written on this item. "
-    "Reply ONLY with a JSON object containing 'identified_name'."
+    "Identify the exact product name, brand, and package size visible in the image. "
+    "Output valid JSON with keys: identified_name (string), confidence (float between 0.0 and 1.0)."
 )
 
 FALLBACK_MOCK_RESPONSES = [
