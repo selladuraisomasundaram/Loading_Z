@@ -3,17 +3,30 @@
 import React, { useEffect, useState } from "react";
 import { Navigation, Compass, MapPin, Play, Square, Loader2 } from "lucide-react";
 import SupermarketMap from "@/components/navigation/SupermarketMap";
-import { AisleData } from "@/components/navigation/storeMapData";
-import { RouteData } from "@/types";
+import ProductSearchMap from "@/components/navigation/ProductSearchMap";
+import { AisleData, catalogProducts } from "@/components/navigation/storeMapData";
+import { RouteData, Product, ProductLocation } from "@/types";
 import { getStoreRoute } from "@/lib/api";
+import { useCart } from "@/hooks/useCart";
 
 export const StoreMapView: React.FC = () => {
-  const [currentLocation, setCurrentLocation] = useState("ENTRANCE");
-  const [selectedAisle, setSelectedAisle] = useState<AisleData | null>(null);
+  const { items } = useCart();
+  const [currentLocation] = useState("ENTRANCE");
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(
+    catalogProducts[0] || null
+  );
   const [targetLocation, setTargetLocation] = useState("A3");
   const [isNavigating, setIsNavigating] = useState(false);
   const [routeData, setRouteData] = useState<RouteData | null>(null);
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
+
+  // Extract locations of items currently in cart for multi-pin map display
+  const cartLocations: ProductLocation[] = items
+    .map((item) => {
+      const match = catalogProducts.find((p) => p.id === item.product.id);
+      return match?.location;
+    })
+    .filter((loc): loc is ProductLocation => Boolean(loc));
 
   useEffect(() => {
     let isMounted = true;
@@ -39,26 +52,43 @@ export const StoreMapView: React.FC = () => {
     };
   }, [currentLocation, targetLocation]);
 
+  const handleProductSelect = (product: Product) => {
+    setSelectedProduct(product);
+    if (product.location?.aisleId) {
+      setTargetLocation(product.location.aisleId);
+    }
+  };
+
   const handleAisleSelect = (aisle: AisleData) => {
-    setSelectedAisle(aisle);
     setTargetLocation(aisle.id);
+    const firstMatch = catalogProducts.find(
+      (p) => p.location?.aisleId === aisle.id
+    );
+    if (firstMatch) {
+      setSelectedProduct(firstMatch);
+    }
   };
 
   const toggleNavigation = () => {
-    if (!isNavigating) {
-      setIsNavigating(true);
-    } else {
-      setIsNavigating(false);
-      setCurrentLocation(targetLocation);
-    }
+    setIsNavigating(!isNavigating);
   };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      {/* PHASE 1 STATIC INDOOR SUPERMARKET SVG MAP COMPONENT */}
+      {/* PRODUCT LOCATION SEARCH CARD (PRODUCT -> MAP FLOW) */}
+      <ProductSearchMap
+        onSelectProduct={handleProductSelect}
+        selectedProduct={selectedProduct}
+        onClearSelection={() => setSelectedProduct(null)}
+      />
+
+      {/* PHASE 2 INTERACTIVE SUPERMARKET MAP WITH SHELF PINS */}
       <SupermarketMap
         initialSelectedAisleId={targetLocation}
+        selectedProduct={selectedProduct}
+        multiSelectedLocations={cartLocations}
         onAisleSelect={handleAisleSelect}
+        onProductSelect={handleProductSelect}
       />
 
       {/* ROUTE INFO CARD & NAVIGATION CONTROLS */}
@@ -73,8 +103,8 @@ export const StoreMapView: React.FC = () => {
                 Pathfinder Navigation Guidance
               </h3>
               <p className="text-xs text-slate-500">
-                {selectedAisle
-                  ? `Navigating to: Aisle ${selectedAisle.id} (${selectedAisle.category})`
+                {selectedProduct
+                  ? `Navigating to: ${selectedProduct.name} (Aisle ${selectedProduct.location?.aisleId || targetLocation} / Shelf ${selectedProduct.location?.shelfId || "S1"})`
                   : `Target Location: Aisle ${targetLocation}`}
               </p>
             </div>
@@ -88,7 +118,6 @@ export const StoreMapView: React.FC = () => {
 
         {/* Route Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
-          {/* Start Point */}
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
               Start Location
@@ -98,17 +127,15 @@ export const StoreMapView: React.FC = () => {
             </span>
           </div>
 
-          {/* Target Aisle */}
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
             <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
               Target Location
             </span>
             <span className="font-black text-amber-600 font-mono text-sm block mt-0.5">
-              Aisle {targetLocation}
+              Aisle {targetLocation} ({selectedProduct?.location?.shelfId || "S1"})
             </span>
           </div>
 
-          {/* Total Distance */}
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
               Total Distance
@@ -122,7 +149,6 @@ export const StoreMapView: React.FC = () => {
             </span>
           </div>
 
-          {/* Estimated Walking Time */}
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
               Est. Walking Time

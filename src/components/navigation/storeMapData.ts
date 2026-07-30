@@ -1,3 +1,5 @@
+import { Product } from "@/types";
+
 export interface AisleData {
   id: string;
   label: string;
@@ -33,12 +35,8 @@ export const storeMapConfig: StoreMapDimensions = {
   viewHeight: 600,
 };
 
-/**
- * Structured Supermarket Aisle Data Model (12 Aisles: A1-A4, B1-B4, C1-C4)
- * Designed for future Phase 2 Product -> Aisle -> Shelf -> Node mapping.
- */
 export const storeAisles: AisleData[] = [
-  // ROW A (Top Row: y = 80)
+  // ROW A (Top Row)
   {
     id: "A1",
     label: "A1",
@@ -68,7 +66,7 @@ export const storeAisles: AisleData[] = [
   {
     id: "A3",
     label: "A3",
-    category: "Beverages & Cold Drinks",
+    category: "Biscuits & Cold Beverages",
     row: "A",
     col: 3,
     x: 460,
@@ -76,7 +74,7 @@ export const storeAisles: AisleData[] = [
     width: 140,
     height: 90,
     shelfCount: 4,
-    description: "Juices, Sparkling Water, Energy Drinks & Sodas",
+    description: "Parle-G, Oreo Biscuits, Juices, Sodas & Iced Tea",
   },
   {
     id: "A4",
@@ -92,7 +90,7 @@ export const storeAisles: AisleData[] = [
     description: "Gluten-Free, Protein Powders, Vegan Options",
   },
 
-  // ROW B (Middle Row: y = 230)
+  // ROW B (Middle Row)
   {
     id: "B1",
     label: "B1",
@@ -135,7 +133,7 @@ export const storeAisles: AisleData[] = [
   {
     id: "B4",
     label: "B4",
-    category: "Breakfast Cereals & Oats",
+    category: "Personal Care & Bathing",
     row: "B",
     col: 4,
     x: 650,
@@ -143,10 +141,10 @@ export const storeAisles: AisleData[] = [
     width: 140,
     height: 90,
     shelfCount: 4,
-    description: "Quaker Oats, Cornflakes, Granola & Muesli",
+    description: "Shampoo, Soaps, Toothpaste & Skincare",
   },
 
-  // ROW C (Bottom Row: y = 380)
+  // ROW C (Bottom Row)
   {
     id: "C1",
     label: "C1",
@@ -189,7 +187,7 @@ export const storeAisles: AisleData[] = [
   {
     id: "C4",
     label: "C4",
-    category: "Household & Personal Care",
+    category: "Household Cleaning",
     row: "C",
     col: 4,
     x: 650,
@@ -197,13 +195,10 @@ export const storeAisles: AisleData[] = [
     width: 140,
     height: 90,
     shelfCount: 4,
-    description: "Detergents, Soaps, Shampoos & Cleaning Supplies",
+    description: "Detergents, Surface Cleaners & Trash Bags",
   },
 ];
 
-/**
- * Structured Store Zones (Entrance & Checkout)
- */
 export const storeZones: StoreZoneData[] = [
   {
     id: "ENTRANCE",
@@ -224,5 +219,172 @@ export const storeZones: StoreZoneData[] = [
     width: 220,
     height: 55,
     description: "Automated Self-Checkout Counters & Exit Gateway",
+  },
+];
+
+/**
+ * PHASE 2: Comprehensive Product Catalog Dataset with Physical Map Coordinates
+ * Maps Product -> Aisle -> Shelf -> SVG (x,y) Map Location
+ */
+export const catalogProducts: Product[] = [
+  {
+    id: "P001",
+    name: "Parle-G Glucose Biscuits 250g",
+    price: 20.0,
+    weightGrams: 250,
+    category: "Biscuits",
+    brand: "Parle",
+    stock: 45,
+    location: {
+      aisleId: "A3",
+      shelfId: "S2",
+      shelfName: "Middle Shelf S2",
+      x: 510,
+      y: 125,
+    },
+  },
+  {
+    id: "SKU-001",
+    name: "Maggi 2-Min Instant Noodles 70g",
+    price: 14.0,
+    weightGrams: 70,
+    category: "Instant Foods",
+    brand: "Nestle",
+    stock: 80,
+    location: {
+      aisleId: "B2",
+      shelfId: "S2",
+      shelfName: "Eye-Level Shelf S2",
+      x: 320,
+      y: 275,
+    },
+  },
+  {
+    id: "P003",
+    name: "Amul Whole Milk 1L",
+    price: 68.0,
+    weightGrams: 1030,
+    category: "Dairy",
+    brand: "Amul",
+    stock: 30,
+    location: {
+      aisleId: "C1",
+      shelfId: "S1",
+      shelfName: "Refrigerated Shelf S1",
+      x: 130,
+      y: 425,
+    },
+  },
+  {
+    id: "P004",
+    name: "Amul Unsalted Butter 200g",
+    price: 58.0,
+    weightGrams: 200,
+    category: "Dairy",
+    brand: "Amul",
+    stock: 25,
+    location: {
+      aisleId: "C1",
+      shelfId: "S2",
+      shelfName: "Refrigerated Shelf S2",
+      x: 170,
+      y: 425,
+    },
+  },
+  {
+    id: "P005",
+    name: "L'Oreal Anti-Frizz Shampoo 340ml",
+    price: 245.0,
+    weightGrams: 360,
+    category: "Personal Care",
+    brand: "L'Oreal",
+    stock: 18,
+    location: {
+      aisleId: "B4",
+      shelfId: "S3",
+      shelfName: "Upper Shelf S3",
+      x: 690,
+      y: 275,
+    },
+  },
+  {
+    id: "P006",
+    name: "Dove Cream Beauty Bath Soap 125g",
+    price: 55.0,
+    weightGrams: 125,
+    category: "Personal Care",
+    brand: "Dove",
+    stock: 60,
+    location: {
+      aisleId: "B4",
+      shelfId: "S2",
+      shelfName: "Middle Shelf S2",
+      x: 725,
+      y: 275,
+    },
+  },
+  {
+    id: "P007",
+    name: "Heinz Tomato Ketchup 500g",
+    price: 99.0,
+    weightGrams: 500,
+    category: "Condiments",
+    brand: "Heinz",
+    stock: 35,
+    location: {
+      aisleId: "C3",
+      shelfId: "S2",
+      shelfName: "Middle Shelf S2",
+      x: 510,
+      y: 425,
+    },
+  },
+  {
+    id: "P008",
+    name: "Lindt Excellence Dark Chocolate 100g",
+    price: 150.0,
+    weightGrams: 105,
+    category: "Snacks",
+    brand: "Lindt",
+    stock: 40,
+    location: {
+      aisleId: "B3",
+      shelfId: "S1",
+      shelfName: "Top Shelf S1",
+      x: 510,
+      y: 275,
+    },
+  },
+  {
+    id: "P009",
+    name: "Multigrain Sourdough Bread 400g",
+    price: 45.0,
+    weightGrams: 400,
+    category: "Bakery",
+    brand: "Modern Bakery",
+    stock: 15,
+    location: {
+      aisleId: "A2",
+      shelfId: "S1",
+      shelfName: "Fresh Bread Shelf S1",
+      x: 320,
+      y: 125,
+    },
+  },
+  {
+    id: "P010",
+    name: "Fresh Organic Red Apples 1kg",
+    price: 180.0,
+    weightGrams: 1000,
+    category: "Fresh Produce",
+    brand: "Organic Fresh",
+    stock: 50,
+    location: {
+      aisleId: "A1",
+      shelfId: "S1",
+      shelfName: "Display Rack S1",
+      x: 130,
+      y: 125,
+    },
   },
 ];

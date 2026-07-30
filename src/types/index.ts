@@ -8,6 +8,14 @@ export type ActiveTab = "dashboard" | "assistant" | "map" | "settings";
 
 export type DetectionStatus = "idle" | "uploading" | "analyzing" | "success" | "error";
 
+export interface ProductLocation {
+  aisleId: string;
+  shelfId: string;
+  shelfName?: string;
+  x: number;
+  y: number;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -17,6 +25,8 @@ export interface Product {
   brand?: string;
   imageUrl?: string;
   barcode?: string;
+  stock?: number;
+  location?: ProductLocation;
 }
 
 export interface CartItemType {
