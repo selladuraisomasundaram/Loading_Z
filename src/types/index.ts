@@ -1,5 +1,6 @@
 export * from "./api";
 export * from "./assistant";
+export * from "./navigation";
 export * from "./recommendation";
 export * from "./sensor";
 

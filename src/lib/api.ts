@@ -5,6 +5,7 @@ import {
   CheckoutResponse,
   CartItemPayload,
   ChatMessage,
+  RouteData,
 } from "@/types";
 import {
   mockIdentifyProduct,
@@ -12,6 +13,7 @@ import {
   mockGetSensorData,
   mockCheckout,
   mockSendChatMessage,
+  mockGetStoreRoute,
 } from "./mock-api";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -195,11 +197,6 @@ export async function checkout(
   }
 }
 
-/**
- * 5. Gemma AI Chat Assistant API
- * Endpoint: POST /api/assistant/chat
- * Request: { message: string }
- */
 export async function sendChatMessage(message: string): Promise<ChatMessage> {
   if (isMockMode()) {
     return await mockSendChatMessage(message);
@@ -224,6 +221,42 @@ export async function sendChatMessage(message: string): Promise<ChatMessage> {
     }
     const msg =
       err instanceof Error ? err.message : "AI Assistant service unavailable.";
+    throw new Error(msg);
+  }
+}
+
+/**
+ * 6. Pathfinder Navigation Engine API
+ * Endpoint: POST /api/navigation/route
+ * Request: { start_node: string, dest_node: string }
+ */
+export async function getStoreRoute(
+  startNode = "ENTRANCE",
+  destNode = "AISLE 2"
+): Promise<RouteData> {
+  if (isMockMode()) {
+    return await mockGetStoreRoute(startNode, destNode);
+  }
+
+  try {
+    const response = await fetchWithTimeout(`${BASE_URL}/api/navigation/route`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ start_node: startNode, dest_node: destNode }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Navigation pathfinder service unavailable.");
+    }
+
+    return (await response.json()) as RouteData;
+  } catch (err: unknown) {
+    console.warn("Real pathfinder API failed, using mock fallback:", err);
+    if (process.env.NODE_ENV === "development") {
+      return await mockGetStoreRoute(startNode, destNode);
+    }
+    const msg =
+      err instanceof Error ? err.message : "Navigation pathfinder service unavailable.";
     throw new Error(msg);
   }
 }
