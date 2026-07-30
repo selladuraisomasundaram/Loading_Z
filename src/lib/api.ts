@@ -23,13 +23,13 @@ const isMockMode = (): boolean => {
   if (mockSetting !== undefined) {
     return mockSetting === "true";
   }
-  return false; // Default to live backend mode
+  return true;
 };
 
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
-  timeoutMs = 60000 // 60 seconds timeout to accommodate local Gemma AI vision & LLM processing
+  timeoutMs = 8000
 ): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -44,7 +44,7 @@ async function fetchWithTimeout(
   } catch (error: unknown) {
     clearTimeout(id);
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("Local Gemma AI processing timed out. Please try again.");
+      throw new Error("Request timed out while connecting to server.");
     }
     throw new Error("Backend unavailable. Please check server connection.");
   }
@@ -61,7 +61,6 @@ export async function identifyProduct(
     const formData = new FormData();
     formData.append("image", file);
 
-    // Try primary v1 endpoint first, fallback to standard endpoint
     let response: Response;
     try {
       response = await fetchWithTimeout(`${BASE_URL}/api/v1/vision/analyze`, {
@@ -75,30 +74,30 @@ export async function identifyProduct(
       });
     }
 
+    if (response.status === 404) {
+      throw new Error("Product not found in catalog.");
+    }
+
     if (!response.ok) {
       throw new Error(`Unable to identify product (HTTP ${response.status}).`);
     }
 
     const rawData = await response.json();
-    
-    // Normalize backend VisionAnalysisResponse contract to frontend ProductIdentificationResponse
     const productData = {
-      sku: rawData.sku || "SKU-UNKNOWN",
-      product_name: rawData.product_name || "Identified Product",
+      product_id: rawData.product_id || rawData.sku || "SKU-001",
+      product_name: rawData.product_name || "Unknown Product",
       brand: rawData.brand || "Generic",
       category: rawData.category || "General",
       sub_category: rawData.sub_category || "General",
       price: rawData.price || 0.0,
-      stock: rawData.stock || 0,
-      aisle: rawData.aisle || "Aisle A1",
-      shelf: rawData.shelf || "Shelf 1",
+      confidence: rawData.confidence || rawData.gemma_confidence || 0.95,
       verified: rawData.verified ?? true,
+      image_url: rawData.image_url || null,
     };
 
     return {
       success: true,
       product: productData,
-      gemma_confidence: rawData.gemma_confidence || 0.89,
     };
   } catch (err: unknown) {
     console.warn("Real Vision API call failed, falling back to mock mode:", err);
@@ -163,10 +162,12 @@ export async function getSensorData(): Promise<SensorDataResponse> {
     const rawData = await response.json();
     return {
       success: true,
-      weight_kg: rawData.weightKg ?? rawData.weight_kg ?? 2.46,
-      stable: rawData.stable ?? true,
-      connected: rawData.connected ?? true,
-      timestamp: rawData.timestamp || new Date().toISOString(),
+      sensor: {
+        weightKg: rawData.weightKg ?? rawData.weight_kg ?? 2.46,
+        stable: rawData.stable ?? true,
+        connected: rawData.connected ?? true,
+        timestamp: rawData.timestamp || new Date().toISOString(),
+      },
     };
   } catch (err: unknown) {
     console.warn("Real load cell sensor API failed, using mock data:", err);
@@ -212,7 +213,7 @@ export async function sendChatMessage(message: string): Promise<ChatMessage> {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message }),
-      }, 60000); // Allow up to 60s for local Gemma AI assistant inference & web tool execution
+      }, 60000);
     } catch {
       response = await fetchWithTimeout(`${BASE_URL}/api/assistant/chat`, {
         method: "POST",
@@ -227,7 +228,6 @@ export async function sendChatMessage(message: string): Promise<ChatMessage> {
 
     const rawData = await response.json();
     
-    // Normalize backend response contract to frontend ChatMessage structure
     return {
       id: rawData.id || `msg-bot-${Date.now()}`,
       sender: "assistant",
@@ -283,10 +283,11 @@ export async function getStoreRoute(
 
     const rawData = await response.json();
     return {
-      current_location: rawData.current_location || startNode,
-      target_location: rawData.target_location || destNode,
+      currentLocation: rawData.current_location || rawData.currentLocation || startNode,
+      targetLocation: rawData.target_location || rawData.targetLocation || destNode,
       waypoints: rawData.waypoints || [startNode, destNode],
-      distance_meters: rawData.distance_meters || 10.0,
+      distanceMeters: rawData.distance_meters || rawData.distanceMeters || 10.0,
+      estimatedTimeSeconds: rawData.estimated_time_seconds || rawData.estimatedTimeSeconds || 15,
     };
   } catch (err: unknown) {
     console.warn("Real pathfinder API failed, using mock fallback:", err);
