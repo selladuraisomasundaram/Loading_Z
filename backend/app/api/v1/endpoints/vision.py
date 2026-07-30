@@ -1,3 +1,7 @@
+import os
+import json
+import re
+import asyncio
 from fastapi import APIRouter, File, UploadFile, Depends
 from app.gemma.vision import identify_product_from_image
 from app.gemma.engine import get_ollama_client, GEMMA_MODEL
@@ -29,7 +33,7 @@ async def analyze_vision_frame(
     confidence = float(vision_result.get("confidence", 0.85))
 
     # 3. Resolve item against local SQLite database catalog
-    product = db.resolve_product(identified_name)
+    product = resolve_product(identified_name, db=db)
 
     # 4. IF database match is verified -> return database product details
     if product and getattr(product, "verified", True):
