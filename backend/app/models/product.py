@@ -11,6 +11,13 @@ class Product(BaseModel):
     aisle: str = Field(..., description="Aisle location in store")
     shelf: str = Field(..., description="Shelf location in store")
     verified: bool = Field(True, description="Whether the product is verified")
+    
+    # Extended CSV dataset fields
+    market_price: float = Field(0.0, description="Market list price")
+    sale_price: float = Field(0.0, description="Sale discount price")
+    type: str = Field("", description="Specific product type/subtype")
+    rating: float = Field(0.0, description="Product rating score")
+    description: str = Field("", description="Full product description text")
 
 class VisionAnalysisResponse(BaseModel):
     sku: str = Field(..., description="Stock Keeping Unit")

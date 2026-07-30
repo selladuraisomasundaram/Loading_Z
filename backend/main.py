@@ -16,6 +16,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def root_gateway():
+    return {
+        "system": "Loading_Z Smart Trolley OS API Gateway",
+        "status": "operational",
+        "version": "1.0.0"
+    }
+
 @app.get("/health")
 def root_health():
     return {"status": "ok", "service": settings.PROJECT_NAME}

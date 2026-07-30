@@ -84,14 +84,31 @@ class DatabaseEngine:
         sub_cat = str(row['sub_category']) if pd.notna(row.get('sub_category')) else "General"
 
         try:
-            price = float(row.get('sale_price', 0.0))
-            if pd.isna(price) or price <= 0:
-                price = float(row.get('market_price', 9.99))
+            sale_price = float(row.get('sale_price', 0.0))
+            if pd.isna(sale_price):
+                sale_price = 0.0
         except (ValueError, TypeError):
-            price = 9.99
+            sale_price = 0.0
 
-        if pd.isna(price) or price <= 0:
-            price = 9.99
+        try:
+            market_price = float(row.get('market_price', 0.0))
+            if pd.isna(market_price):
+                market_price = 0.0
+        except (ValueError, TypeError):
+            market_price = 0.0
+
+        try:
+            rating = float(row.get('rating', 0.0))
+            if pd.isna(rating):
+                rating = 0.0
+        except (ValueError, TypeError):
+            rating = 0.0
+
+        prod_type = str(row['type']).strip() if pd.notna(row.get('type')) else ""
+        desc = str(row['description']).strip() if pd.notna(row.get('description')) else ""
+
+        # Map active price: preference sale_price > market_price > 9.99 default
+        price = sale_price if sale_price > 0 else (market_price if market_price > 0 else 9.99)
 
         sku = self._generate_sku(prod_name, brand_name, index)
         aisle, shelf = self._generate_location(cat, index)
@@ -107,8 +124,66 @@ class DatabaseEngine:
             stock=stock,
             aisle=aisle,
             shelf=shelf,
-            verified=True
+            verified=True,
+            market_price=round(market_price, 2),
+            sale_price=round(sale_price, 2),
+            type=prod_type,
+            rating=round(rating, 2),
+            description=desc
         )
+
+    def search_products(self, query: str, limit: int = 5) -> list[dict]:
+        """
+        Returns a list of product dictionaries matching the query (using substring or fuzzy matching),
+        rather than just a single resolved product.
+        """
+        if not query or not query.strip() or self.df is None or self.df.empty:
+            return []
+
+        norm_query = self._normalize_str(query)
+        if not norm_query:
+            return []
+
+        matched_indices = []
+
+        # 1. Substring match on normalized product name or search text
+        sub_matches = self.df[
+            self.df['normalized_name'].str.contains(re.escape(norm_query), case=False, na=False) |
+            self.df['search_text'].str.contains(re.escape(norm_query), case=False, na=False)
+        ]
+        if not sub_matches.empty:
+            matched_indices.extend(sub_matches.index.tolist())
+
+        # 2. Substring match with query words if limit not reached
+        if len(matched_indices) < limit:
+            query_words = [w for w in norm_query.split() if len(w) > 2]
+            if query_words:
+                word_match_mask = pd.Series(True, index=self.df.index)
+                for w in query_words:
+                    word_match_mask = word_match_mask & self.df['search_text'].str.contains(re.escape(w), case=False, na=False)
+
+                word_matches = self.df[word_match_mask]
+                for idx in word_matches.index:
+                    if idx not in matched_indices:
+                        matched_indices.append(idx)
+
+        # 3. Fuzzy match using difflib if still not enough
+        if len(matched_indices) < limit:
+            all_names = self.df['normalized_name'].tolist()
+            fuzzy_matches = difflib.get_close_matches(norm_query, all_names, n=limit, cutoff=0.4)
+            for m_name in fuzzy_matches:
+                m_rows = self.df[self.df['normalized_name'] == m_name]
+                for idx in m_rows.index:
+                    if idx not in matched_indices:
+                        matched_indices.append(idx)
+
+        results = []
+        for idx in matched_indices[:limit]:
+            row = self.df.iloc[idx]
+            prod = self._row_to_product(row, idx)
+            results.append(prod.model_dump() if hasattr(prod, 'model_dump') else prod.dict())
+
+        return results
 
     def resolve_product(self, query_name: str) -> Product:
         if not query_name or not query_name.strip():
@@ -187,7 +262,12 @@ class DatabaseEngine:
             stock=50,
             aisle="Aisle A1",
             shelf="Shelf 1",
-            verified=False
+            verified=False,
+            market_price=99.0,
+            sale_price=99.0,
+            type="General",
+            rating=4.0,
+            description="Fallback mock product profile"
         )
 
 db_engine = DatabaseEngine()
@@ -197,3 +277,7 @@ def get_db_engine() -> DatabaseEngine:
 
 def resolve_product(query_name: str) -> Product:
     return db_engine.resolve_product(query_name)
+
+def search_products(query: str, limit: int = 5) -> list[dict]:
+    return db_engine.search_products(query, limit)
+
