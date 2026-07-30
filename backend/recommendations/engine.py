@@ -98,10 +98,16 @@ def generate_hybrid_recommendations(cart_items: List[str], current_scanned_item:
     candidates_with_rules = []
     seen_keywords = set()
     
+    def is_in_cart(kw_str: str) -> bool:
+        for c_item in normalized_cart:
+            if kw_str in c_item or c_item in kw_str:
+                return True
+        return False
+        
     # Process co-occurrence first (higher priority)
     for kw in co_occurrence_keywords:
         kw_norm = normalize_text(kw)
-        if kw_norm not in seen_keywords and kw_norm not in normalized_cart:
+        if kw_norm not in seen_keywords and not is_in_cart(kw_norm):
             seen_keywords.add(kw_norm)
             # If cart is empty, it's cold start
             rule = "COLD_START" if not combined_cart else "CO_OCCURRENCE"
@@ -110,7 +116,7 @@ def generate_hybrid_recommendations(cart_items: List[str], current_scanned_item:
     # Process recipe matches
     for kw in recipe_keywords:
         kw_norm = normalize_text(kw)
-        if kw_norm not in seen_keywords and kw_norm not in normalized_cart:
+        if kw_norm not in seen_keywords and not is_in_cart(kw_norm):
             seen_keywords.add(kw_norm)
             candidates_with_rules.append({"keyword": kw, "rule": "RECIPE_MATCH"})
             

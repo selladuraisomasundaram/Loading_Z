@@ -48,6 +48,9 @@ export function useCart() {
   const addRecommendationToCart = useCartStore(
     (state) => state.addRecommendationToCart
   );
+  const fetchRecommendations = useCartStore(
+    (state) => state.fetchRecommendations
+  );
   const processCheckout = useCartStore((state) => state.processCheckout);
 
   return {
@@ -82,6 +85,7 @@ export function useCart() {
     analyzeSelectedFile,
     addGemmaResultToCart,
     addRecommendationToCart,
+    fetchRecommendations,
     processCheckout,
   };
 }

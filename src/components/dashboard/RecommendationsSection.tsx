@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { Sparkles, Plus, Tag, Loader2, PackageX, ShoppingBag } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { formatCurrency } from "@/lib/utils";
@@ -10,7 +10,16 @@ export const RecommendationsSection: React.FC = () => {
     recommendations,
     isRecommendationsLoading,
     addRecommendationToCart,
+    fetchRecommendations,
   } = useCart();
+
+  useEffect(() => {
+    // Fetch cold start recommendations on mount if none exist
+    if (recommendations.length === 0) {
+      fetchRecommendations();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">

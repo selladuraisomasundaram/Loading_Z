@@ -72,62 +72,6 @@ export interface CartStoreState {
   updateLoadCellWeight: (weightGrams: number, isStable?: boolean) => void;
 }
 
-const initialMockCartItems: CartItemType[] = [
-  {
-    product: {
-      id: "SKU-001",
-      name: "Maggi Noodles",
-      brand: "Nestle",
-      category: "Instant Foods / Noodles",
-      price: 12.0,
-      weightGrams: 70,
-    },
-    quantity: 2,
-    addedAt: new Date().toISOString(),
-  },
-  {
-    product: {
-      id: "SKU-002",
-      name: "Almond Milk Unsweetened 1L",
-      brand: "Silk Fresh",
-      category: "Beverages / Dairy Alternatives",
-      price: 190.0,
-      weightGrams: 1020,
-    },
-    quantity: 1,
-    addedAt: new Date().toISOString(),
-  },
-];
-
-const initialMockRecommendations: Recommendation[] = [
-  {
-    id: "rec-001",
-    title: "You may also like",
-    product: {
-      id: "SKU-100",
-      name: "Ketchup",
-      brand: "Heinz",
-      category: "Condiments",
-      price: 99.0,
-      weightGrams: 500,
-    },
-    reason: "Pairs well with items in your cart",
-  },
-  {
-    id: "rec-002",
-    title: "Frequently Bought Together",
-    product: {
-      id: "SKU-101",
-      name: "Unsalted Creamery Butter 200g",
-      brand: "Amul",
-      category: "Dairy",
-      price: 58.0,
-      weightGrams: 200,
-    },
-    reason: "Frequently bought with Sourdough Bread",
-  },
-];
-
 function calculateCartTotals(items: CartItemType[]) {
   const itemCount = items.reduce((acc, curr) => acc + curr.quantity, 0);
   const subtotal = items.reduce(
@@ -153,7 +97,7 @@ function calculateCartTotals(items: CartItemType[]) {
   };
 }
 
-const initialTotals = calculateCartTotals(initialMockCartItems);
+
 
 export const useCartStore = create<CartStoreState>((set, get) => ({
   // Navigation State
@@ -161,12 +105,12 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
   setActiveTab: (tab: ActiveTab) => set({ activeTab: tab }),
 
   // Cart State
-  items: initialMockCartItems,
-  itemCount: initialTotals.itemCount,
-  subtotal: initialTotals.subtotal,
-  discount: initialTotals.discount,
-  tax: initialTotals.tax,
-  total: initialTotals.total,
+  items: [],
+  itemCount: 0,
+  subtotal: 0,
+  discount: 0,
+  tax: 0,
+  total: 0,
 
   detectionStatus: "success",
   selectedFile: null,
@@ -175,31 +119,20 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
   uploadedFileSize: null,
   fileError: null,
   isAnalyzing: false,
-  gemmaResult: {
-    product_id: "SKU-001",
-    product_name: "Maggi Noodles",
-    brand: "Nestle",
-    category: "Instant Foods",
-    sub_category: "Noodles",
-    price: 12.0,
-    confidence: 0.96,
-    verified: true,
-    estimatedWeightGrams: 70,
-    detectedAt: new Date().toLocaleTimeString(),
-  },
+  gemmaResult: null,
 
   checkoutStatus: "idle",
   lastOrder: null,
 
   loadCell: {
-    currentWeightGrams: initialTotals.expectedWeightGrams,
-    expectedWeightGrams: initialTotals.expectedWeightGrams,
+    currentWeightGrams: 0,
+    expectedWeightGrams: 0,
     isStable: true,
     statusText: "Stable",
     lastUpdated: "Just now",
   },
 
-  recommendations: initialMockRecommendations,
+  recommendations: [],
   isRecommendationsLoading: false,
 
   selectFile: (file: File) => {
