@@ -1,4 +1,5 @@
 export * from "./recommendation";
+export * from "./sensor";
 
 export type DetectionStatus = "idle" | "uploading" | "analyzing" | "success" | "error";
 
