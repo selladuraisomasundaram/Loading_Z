@@ -53,9 +53,8 @@ async function fetchWithTimeout(
 export async function identifyProduct(
   file: File
 ): Promise<ProductIdentificationResponse> {
-  if (isMockMode()) {
-    return await mockIdentifyProduct(file);
-  }
+  // Always use real backend for vision to ensure AI model is used
+
 
   try {
     const formData = new FormData();
@@ -100,12 +99,9 @@ export async function identifyProduct(
       product: productData,
     };
   } catch (err: unknown) {
-    console.warn("Real Vision API call failed, falling back to mock mode:", err);
-    if (process.env.NODE_ENV === "development") {
-      return await mockIdentifyProduct(file);
-    }
+    console.error("Real Vision API call failed:", err);
     const message =
-      err instanceof Error ? err.message : "Unable to identify product.";
+      err instanceof Error ? err.message : "Unable to identify product. Backend unavailable.";
     throw new Error(message);
   }
 }
