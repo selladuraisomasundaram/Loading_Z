@@ -7,6 +7,8 @@ import {
   ChatMessage,
   RouteData,
 } from "@/types";
+import { supermarketGraph } from "./navigation/navigationGraph";
+import { findShortestPathAStar, findNearestWalkableNode } from "./navigation/aStar";
 
 const mockCatalog: ProductIdentificationResponse["product"][] = [
   {
@@ -155,14 +157,14 @@ export async function mockSendChatMessage(
     return {
       id: `msg-${Date.now()}`,
       sender: "assistant",
-      text: "Amul Butter (200g, ₹58) is located in AISLE 3 (Dairy & Eggs), Shelf 2. Would you like to view the navigation path on the Store Map?",
+      text: "Amul Butter (200g, ₹58) is located in AISLE C1 (Dairy & Eggs), Shelf S2. Click 'SHOW ON MAP' to calculate the A* navigation path.",
       timestamp: new Date().toLocaleTimeString(),
-      targetAisle: "AISLE 3",
+      targetAisle: "C1",
       toolActivity: [
         { step: "🧠 Intent Analysis", action: "Parsed entity: 'Amul Butter'" },
-        { step: "🔎 Querying Product Catalog DB", action: "SKU-000302 found" },
-        { step: "📍 Resolving Aisle location", action: "Matched AISLE 3 (Dairy & Eggs)" },
-        { step: "🗺 Calculating path via Navigation Engine", action: "Distance: 14.5 meters" },
+        { step: "🔎 Querying Product Catalog DB", action: "P004 found in C1/S2" },
+        { step: "📍 Resolving Aisle location", action: "Mapped Aisle C1" },
+        { step: "🗺 Pathfinder Engine", action: "Triggered A* route calculation" },
         { step: "✓ Response synthesized", action: "Generated interactive map trigger" },
       ],
     };
@@ -172,13 +174,13 @@ export async function mockSendChatMessage(
     return {
       id: `msg-${Date.now()}`,
       sender: "assistant",
-      text: "I found Maggi 2-Min Noodles (₹14, AISLE 2) and Roasted Peanuts (₹35, AISLE 4) matching snacks under ₹50 in catalog.",
+      text: "I found Maggi 2-Min Noodles (₹14, AISLE B2) matching snacks under ₹50 in catalog.",
       timestamp: new Date().toLocaleTimeString(),
-      targetAisle: "AISLE 2",
+      targetAisle: "B2",
       toolActivity: [
         { step: "🧠 Intent Analysis", action: "Parsed query: 'Snacks < ₹50'" },
-        { step: "🔎 Querying Product Catalog DB", action: "Filtered 2 products under ₹50" },
-        { step: "📍 Resolving Aisle location", action: "Matched AISLE 2 (Instant Foods)" },
+        { step: "🔎 Querying Product Catalog DB", action: "Filtered products under ₹50" },
+        { step: "📍 Resolving Aisle location", action: "Mapped Aisle B2" },
         { step: "✓ Response synthesized", action: "Formatted product listing" },
       ],
     };
@@ -188,9 +190,9 @@ export async function mockSendChatMessage(
     return {
       id: `msg-${Date.now()}`,
       sender: "assistant",
-      text: "Based on recipe index and web search, Maggi Noodles pair exceptionally well with Heinz Tomato Ketchup (AISLE 4), Melted Cheese (AISLE 3), and Crispy Oregano Seasoning.",
+      text: "Based on recipe index and web search, Maggi Noodles pair exceptionally well with Heinz Tomato Ketchup (AISLE C3), Melted Butter (AISLE C1), and Oregano Seasoning.",
       timestamp: new Date().toLocaleTimeString(),
-      targetAisle: "AISLE 4",
+      targetAisle: "C3",
       webSearchUsed: true,
       webSearchResults: {
         query: "What pairs best with Maggi Instant Noodles?",
@@ -209,7 +211,7 @@ export async function mockSendChatMessage(
   return {
     id: `msg-${Date.now()}`,
     sender: "assistant",
-    text: `I processed your request "${message}". I can help locate products, verify catalog prices, or find aisle paths across the store.`,
+    text: `I processed your request "${message}". I can help locate products, calculate A* shortest paths, or verify catalog prices.`,
     timestamp: new Date().toLocaleTimeString(),
     toolActivity: [
       { step: "🧠 Intent Analysis", action: "General intent analysis" },
@@ -219,28 +221,49 @@ export async function mockSendChatMessage(
   };
 }
 
+/**
+ * PHASE 3: Executes real A* Pathfinding algorithm on supermarket graph
+ */
 export async function mockGetStoreRoute(
   startNode = "ENTRANCE",
-  destNode = "AISLE 2"
+  destNode = "A3"
 ): Promise<RouteData> {
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  await new Promise((resolve) => setTimeout(resolve, 200));
 
-  const distanceMap: Record<string, { dist: number; time: number; item?: string }> = {
-    "AISLE 1": { dist: 8.5, time: 12, item: "Fresh Organic Produce & Bakery" },
-    "AISLE 2": { dist: 14.5, time: 20, item: "Maggi Noodles (SKU-001)" },
-    "AISLE 3": { dist: 18.0, time: 25, item: "Amul Butter & Dairy Products" },
-    "AISLE 4": { dist: 22.5, time: 32, item: "Heinz Ketchup & Pantry Snacks" },
-    "CHECKOUT": { dist: 28.0, time: 40, item: "Express Self-Checkout Counters" },
-  };
+  // Map destination string (e.g., "A3" or "ENTRANCE" or "CHECKOUT") to nearest graph node
+  let startId = "N_ENTRANCE";
+  if (startNode === "CHECKOUT") startId = "N_CHECKOUT";
 
-  const info = distanceMap[destNode] || { dist: 14.5, time: 20, item: "General Merchandise" };
+  let targetGraphNodeId = `N_AISLE_${destNode.replace(/\s+/g, "")}`;
+  if (destNode === "ENTRANCE") targetGraphNodeId = "N_ENTRANCE";
+  if (destNode === "CHECKOUT") targetGraphNodeId = "N_CHECKOUT";
+
+  // Fallback lookup if node ID doesn't exist directly
+  if (!supermarketGraph.nodes[targetGraphNodeId]) {
+    const matched = Object.values(supermarketGraph.nodes).find(
+      (n) => n.aisleId === destNode || n.id.includes(destNode)
+    );
+    if (matched) {
+      targetGraphNodeId = matched.id;
+    } else {
+      // Find nearest corridor node by default
+      const nearest = findNearestWalkableNode(supermarketGraph, 500, 200);
+      targetGraphNodeId = nearest.id;
+    }
+  }
+
+  const result = findShortestPathAStar(
+    supermarketGraph,
+    startId,
+    targetGraphNodeId
+  );
 
   return {
     currentLocation: startNode,
     targetLocation: destNode,
-    targetProductName: info.item,
-    waypoints: [startNode, "MAIN_CORRIDOR_ENTRY", destNode],
-    distanceMeters: info.dist,
-    estimatedTimeSeconds: info.time,
+    targetProductName: `Aisle ${destNode}`,
+    waypoints: result.pathNodeIds,
+    distanceMeters: result.totalDistanceMeters,
+    estimatedTimeSeconds: result.estimatedTimeSeconds,
   };
 }

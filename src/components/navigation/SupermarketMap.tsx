@@ -8,6 +8,9 @@ import {
   CheckCircle2,
   Package,
   Sparkles,
+  Play,
+  Square,
+  Compass,
 } from "lucide-react";
 import {
   storeAisles,
@@ -16,7 +19,9 @@ import {
   catalogProducts,
   AisleData,
 } from "./storeMapData";
-import { Product, ProductLocation } from "@/types";
+import { Product, ProductLocation, AStarResult } from "@/types";
+import { supermarketGraph } from "@/lib/navigation/navigationGraph";
+import { findShortestPathAStar, findNearestWalkableNode } from "@/lib/navigation/aStar";
 import { formatCurrency } from "@/lib/utils";
 
 export interface SupermarketMapProps {
@@ -37,12 +42,13 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
   const [selectedAisleId, setSelectedAisleId] = useState<string>(
     selectedProduct?.location?.aisleId || initialSelectedAisleId
   );
+  const [isNavigating, setIsNavigating] = useState<boolean>(false);
+  const [startNodeId] = useState<string>("N_ENTRANCE");
 
   const activeAisleId = selectedProduct?.location?.aisleId || selectedAisleId;
   const selectedAisle =
     storeAisles.find((a) => a.id === activeAisleId) || storeAisles[0]!;
 
-  // Products stocked in the currently selected aisle (MAP -> PRODUCT flow)
   const aisleProducts = catalogProducts.filter(
     (p) => p.location?.aisleId === activeAisleId
   );
@@ -51,6 +57,32 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
     setSelectedAisleId(aisle.id);
     onAisleSelect?.(aisle);
   };
+
+  // PHASE 3: Calculate A* Path from ENTRANCE to Target Product / Aisle Node
+  let targetNodeId = `N_AISLE_${activeAisleId}`;
+  if (selectedProduct && selectedProduct.location) {
+    const nearest = findNearestWalkableNode(
+      supermarketGraph,
+      selectedProduct.location.x,
+      selectedProduct.location.y
+    );
+    targetNodeId = nearest.id;
+  }
+
+  const aStarRoute: AStarResult = findShortestPathAStar(
+    supermarketGraph,
+    startNodeId,
+    targetNodeId
+  );
+
+  // Generate SVG path string "M x1 y1 L x2 y2 L x3 y3..." from A* waypoints
+  const svgPathD = aStarRoute.waypoints.length > 0
+    ? aStarRoute.waypoints.reduce(
+        (acc, curr, idx) =>
+          idx === 0 ? `M ${curr.x} ${curr.y}` : `${acc} L ${curr.x} ${curr.y}`,
+        ""
+      )
+    : "";
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -62,10 +94,10 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
           </div>
           <div>
             <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">
-              Indoor Supermarket Floor Plan & Shelf Pin Locator
+              Indoor Supermarket Map & A* Navigation Engine
             </h2>
             <p className="text-xs text-slate-500">
-              Phase 2: Product → Aisle → Shelf → Physical SVG Coordinates
+              Phase 3: Spatial Graph Pathfinder & SVG Polyline Route Visualization
             </p>
           </div>
         </div>
@@ -76,26 +108,22 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
             Legend:
           </span>
           <div className="flex items-center gap-1.5 text-slate-700">
-            <span className="w-3 h-3 rounded-full bg-sky-500 border border-sky-600" />
-            <span>Entrance</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-slate-700">
             <span className="w-3 h-3 rounded-full bg-emerald-500 border border-emerald-600" />
-            <span>Checkout</span>
+            <span>🟢 Start (Entrance)</span>
           </div>
-          <div className="flex items-center gap-1.5 text-slate-700">
-            <span className="w-3 h-3 rounded-md bg-slate-700 border border-slate-600" />
-            <span>Aisle</span>
+          <div className="flex items-center gap-1.5 text-sky-700 font-bold">
+            <span className="w-4 h-1 bg-sky-400 rounded-full" />
+            <span>━━ A* Route Line</span>
           </div>
           <div className="flex items-center gap-1.5 text-amber-800 font-bold">
-            <span className="w-3 h-3 rounded-md bg-amber-400 border border-amber-500 shadow-2xs" />
+            <span className="w-3 h-3 rounded-md bg-amber-400 border border-amber-500" />
             <span>Selected Aisle</span>
           </div>
           <div className="flex items-center gap-1.5 text-purple-700 font-bold">
             <span className="w-3.5 h-3.5 rounded-full bg-purple-500 text-white flex items-center justify-center text-[10px]">
               📍
             </span>
-            <span>Shelf Pin Marker</span>
+            <span>Shelf Target</span>
           </div>
         </div>
       </div>
@@ -112,27 +140,20 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
         >
           <defs>
             <pattern
-              id="shelfTexturePattern"
+              id="shelfPattern"
               width="10"
               height="10"
               patternUnits="userSpaceOnUse"
             >
-              <line
-                x1="0"
-                y1="5"
-                x2="10"
-                y2="5"
-                stroke="#334155"
-                strokeWidth="1"
-              />
+              <line x1="0" y1="5" x2="10" y2="5" stroke="#334155" strokeWidth="1" />
             </pattern>
 
-            <linearGradient id="selectedGlowGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <linearGradient id="selectedGlowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.9" />
               <stop offset="100%" stopColor="#d97706" stopOpacity="0.95" />
             </linearGradient>
 
-            <linearGradient id="aisleGradientFill" x1="0%" y1="0%" x2="100%" y2="100%">
+            <linearGradient id="aisleGradFill" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#1e293b" stopOpacity="0.95" />
               <stop offset="100%" stopColor="#0f172a" stopOpacity="0.95" />
             </linearGradient>
@@ -151,7 +172,7 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
             strokeDasharray="6 6"
           />
 
-          {/* STORE TITLE BANNER ON CANVAS */}
+          {/* STORE TITLE BANNER */}
           <text
             x="450"
             y="48"
@@ -174,7 +195,7 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
             strokeLinejoin="round"
           />
 
-          {/* RENDER 12 INTERACTIVE AISLES (A1-A4, B1-B4, C1-C4) */}
+          {/* RENDER 12 INTERACTIVE AISLES (A1-C4) */}
           {storeAisles.map((aisle) => {
             const isSelected = activeAisleId === aisle.id;
 
@@ -190,7 +211,7 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
                   width={aisle.width}
                   height={aisle.height}
                   rx="12"
-                  fill={isSelected ? "url(#selectedGlowGradient)" : "url(#aisleGradientFill)"}
+                  fill={isSelected ? "url(#selectedGlowGrad)" : "url(#aisleGradFill)"}
                   stroke={isSelected ? "#fbbf24" : "#334155"}
                   strokeWidth={isSelected ? "3" : "1.5"}
                   className="group-hover:stroke-sky-400 transition-colors"
@@ -202,7 +223,7 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
                   width={aisle.width - 16}
                   height={aisle.height - 36}
                   rx="6"
-                  fill="url(#shelfTexturePattern)"
+                  fill="url(#shelfPattern)"
                   opacity={isSelected ? "0.3" : "0.5"}
                 />
 
@@ -241,32 +262,45 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
             );
           })}
 
-          {/* RENDER MULTIPLE PRODUCT PINS (Multi-Product Selection / Cart Items) */}
+          {/* RENDER MULTI-PRODUCT PINS */}
           {multiSelectedLocations.map((loc, idx) => (
-            <g key={`pin-multi-${idx}`}>
-              <circle
-                cx={loc.x}
-                cy={loc.y}
-                r="10"
-                fill="#38bdf8"
-                fillOpacity="0.3"
-                className="animate-ping"
-              />
+            <g key={`pin-m-${idx}`}>
+              <circle cx={loc.x} cy={loc.y} r="10" fill="#38bdf8" fillOpacity="0.3" />
               <circle cx={loc.x} cy={loc.y} r="8" fill="#0284c7" stroke="#ffffff" strokeWidth="2" />
-              <text
-                x={loc.x}
-                y={loc.y + 4}
-                textAnchor="middle"
-                fill="#ffffff"
-                fontSize="10"
-                fontWeight="900"
-              >
+              <text x={loc.x} y={loc.y + 4} textAnchor="middle" fill="#ffffff" fontSize="10" fontWeight="900">
                 📍
               </text>
             </g>
           ))}
 
-          {/* RENDER ACTIVE SELECTED PRODUCT SHELF PIN (📍) AT EXACT SVG (X, Y) */}
+          {/* PHASE 3: RENDER SVG ROUTE POLYLINE (A* CALCULATED PATH) */}
+          {isNavigating && svgPathD && (
+            <g>
+              {/* Outer Glow Line */}
+              <path
+                d={svgPathD}
+                fill="none"
+                stroke="#38bdf8"
+                strokeWidth="10"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity="0.4"
+                className="animate-pulse"
+              />
+              {/* Inner Glowing Animated Dash Line */}
+              <path
+                d={svgPathD}
+                fill="none"
+                stroke="#06b6d4"
+                strokeWidth="5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray="8 8"
+              />
+            </g>
+          )}
+
+          {/* RENDER ACTIVE SELECTED PRODUCT SHELF PIN (📍) */}
           {selectedProduct && selectedProduct.location && (
             <g className="animate-bounce">
               <circle
@@ -296,7 +330,6 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
                 📍
               </text>
 
-              {/* Shelf Tag Overlay Label */}
               <rect
                 x={selectedProduct.location.x - 30}
                 y={selectedProduct.location.y - 32}
@@ -380,9 +413,95 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
         </svg>
       </div>
 
-      {/* MAP -> PRODUCT FLOW: AISLE INVENTORY DRAWER */}
+      {/* PHASE 3 ROUTE CONTROLS & TELEMETRY PANEL */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center space-x-2.5">
+            <div className="p-2 bg-sky-50 text-sky-600 rounded-xl border border-sky-100">
+              <Compass className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-extrabold text-slate-900 text-base">
+                A* Pathfinder Route Telemetry
+              </h3>
+              <p className="text-xs text-slate-500">
+                {selectedProduct
+                  ? `Target Product: ${selectedProduct.name} (Aisle ${selectedProduct.location?.aisleId} / Shelf ${selectedProduct.location?.shelfId})`
+                  : `Target Aisle: Aisle ${activeAisleId}`}
+              </p>
+            </div>
+          </div>
+
+          <span className="bg-sky-100 text-sky-900 font-bold text-xs px-3 py-1 rounded-full border border-sky-300">
+            A* Engine: {aStarRoute.success ? "Path Found" : "No Route"}
+          </span>
+        </div>
+
+        {/* Route Stats Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              Start Node
+            </span>
+            <span className="font-black text-slate-900 font-mono text-sm block mt-0.5">
+              ENTRANCE (🛒)
+            </span>
+          </div>
+
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+            <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
+              Destination Target
+            </span>
+            <span className="font-black text-amber-600 font-mono text-sm block mt-0.5">
+              Aisle {activeAisleId} ({selectedProduct?.location?.shelfId || "S1"})
+            </span>
+          </div>
+
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              Calculated Map Distance
+            </span>
+            <span className="font-black text-slate-900 font-mono text-sm block mt-0.5">
+              {aStarRoute.totalDistanceMeters} meters
+            </span>
+          </div>
+
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              Est. Walking Time
+            </span>
+            <span className="font-black text-slate-900 font-mono text-sm block mt-0.5">
+              {aStarRoute.estimatedTimeSeconds} seconds
+            </span>
+          </div>
+        </div>
+
+        {/* Route Action Controls: [ Navigate ] & [ Clear Route ] */}
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            type="button"
+            onClick={() => setIsNavigating(true)}
+            disabled={isNavigating}
+            className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800/50 disabled:cursor-not-allowed text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2"
+          >
+            <Play className="w-4 h-4 fill-white" />
+            <span>Navigate (A* Route)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsNavigating(false)}
+            disabled={!isNavigating}
+            className="px-5 py-3 bg-rose-50 hover:bg-rose-100 disabled:opacity-40 text-rose-700 font-bold text-xs rounded-xl border border-rose-200 transition-colors flex items-center gap-1.5"
+          >
+            <Square className="w-3.5 h-3.5 fill-rose-700" />
+            <span>Clear Route</span>
+          </button>
+        </div>
+      </div>
+
+      {/* AISLE INVENTORY DRAWER */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-        {/* Selected Aisle Information Panel */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center space-x-2.5">
@@ -431,7 +550,6 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
           </div>
         </div>
 
-        {/* MAP -> PRODUCT DRAWER: Products stocked in clicked Aisle */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center space-x-2">
