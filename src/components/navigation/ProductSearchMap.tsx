@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Search, Tag, PackageCheck, Sparkles, X } from "lucide-react";
+import { Search, Tag, PackageCheck, Sparkles, X, MessageSquare, Bot } from "lucide-react";
 import { catalogProducts } from "./storeMapData";
 import { Product } from "@/types";
 import { formatCurrency } from "@/lib/utils";
@@ -11,6 +11,14 @@ export interface ProductSearchMapProps {
   selectedProduct?: Product | null;
   onClearSelection?: () => void;
 }
+
+const sampleVoiceQueries = [
+  { label: "🗣️ \"Where is Parle-G?\"", productId: "P001" },
+  { label: "🗣️ \"Take me to shampoo\"", productId: "P007" },
+  { label: "🗣️ \"Where is milk?\"", productId: "P003" },
+  { label: "🗣️ \"Show me biscuits\"", productId: "P001" },
+  { label: "🗣️ \"How do I reach the dairy section?\"", productId: "P003" },
+];
 
 export const ProductSearchMap: React.FC<ProductSearchMapProps> = ({
   onSelectProduct,
@@ -27,6 +35,13 @@ export const ProductSearchMap: React.FC<ProductSearchMapProps> = ({
       p.location?.aisleId.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleVoiceQueryClick = (productId: string) => {
+    const matched = catalogProducts.find((p) => p.id === productId || p.productId === productId);
+    if (matched) {
+      onSelectProduct(matched);
+    }
+  };
+
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
       {/* Header & Clear Trigger */}
@@ -37,10 +52,10 @@ export const ProductSearchMap: React.FC<ProductSearchMapProps> = ({
           </div>
           <div>
             <h3 className="font-extrabold text-slate-900 text-sm">
-              Supermarket Product Location Search
+              Supermarket Product Location Search & Voice Intent Engine
             </h3>
             <p className="text-xs text-slate-500">
-              Find exact Aisle & Shelf map coordinates
+              Gemma Voice Intent → DB Lookup → A* Navigation Engine → Map Visualization
             </p>
           </div>
         </div>
@@ -54,6 +69,27 @@ export const ProductSearchMap: React.FC<ProductSearchMapProps> = ({
             <X className="w-3.5 h-3.5" /> Clear Focus
           </button>
         )}
+      </div>
+
+      {/* SAMPLE VOICE INTENT PILLS */}
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600">
+          <Bot className="w-3.5 h-3.5 text-purple-600" />
+          <span>Gemma Voice Queries (Try clicking an intent query below):</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {sampleVoiceQueries.map((q, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => handleVoiceQueryClick(q.productId)}
+              className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-900 font-bold text-[11px] rounded-xl transition-colors shadow-2xs flex items-center gap-1"
+            >
+              <MessageSquare className="w-3 h-3 text-purple-600" />
+              <span>{q.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Search Input Bar */}

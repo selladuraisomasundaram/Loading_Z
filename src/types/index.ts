@@ -10,6 +10,50 @@ export type ActiveTab = "dashboard" | "assistant" | "map" | "settings";
 
 export type DetectionStatus = "idle" | "uploading" | "analyzing" | "success" | "error";
 
+export type PositionConnectionStatus = "Connected" | "Connecting" | "Disconnected" | "Tracking";
+
+export interface PersonPosition {
+  personId?: string;
+  x: number;
+  y: number;
+  zoneId: string;
+  aisleId: string;
+  timestamp: string;
+}
+
+export interface NavigationPoint {
+  x: number;
+  y: number;
+  label?: string;
+}
+
+export interface NavigationRequest {
+  start: NavigationPoint;
+  destination: NavigationPoint;
+  productId?: string;
+  productName?: string;
+  aisleId?: string;
+  shelfId?: string;
+}
+
+export interface TrackedPerson {
+  personId: string;
+  name: string;
+  x: number;
+  y: number;
+  zoneId: string;
+  aisleId: string;
+  timestamp: string;
+  status: PositionConnectionStatus;
+  history: MovementHistoryPoint[];
+}
+
+export interface MovementHistoryPoint {
+  x: number;
+  y: number;
+  timestamp: string;
+}
+
 export interface ProductLocation {
   aisleId: string;
   shelfId: string;
@@ -20,7 +64,9 @@ export interface ProductLocation {
 
 export interface Product {
   id: string;
+  productId?: string;
   name: string;
+  productName?: string;
   price: number;
   weightGrams: number;
   category: string;
@@ -28,6 +74,11 @@ export interface Product {
   imageUrl?: string;
   barcode?: string;
   stock?: number;
+  aisleId?: string;
+  shelfId?: string;
+  mapX?: number;
+  mapY?: number;
+  availability?: "In Stock" | "Low Stock" | "Out of Stock";
   location?: ProductLocation;
 }
 
