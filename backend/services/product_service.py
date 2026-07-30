@@ -39,34 +39,26 @@ def resolve_product(query_name: str, db: Optional[Session] = None) -> Product:
         if exact:
             return exact
 
-        # 2. Substring match on product_name or brand
+        # 2. Substring match on product_name
         sub = session.query(Product).filter(
-            (Product.product_name.ilike(norm_query)) | (Product.brand.ilike(norm_query))
+            Product.product_name.ilike(norm_query)
         ).first()
         if sub:
             return sub
 
-        # 3. Substring match on category or sub_category or type
-        cat_match = session.query(Product).filter(
-            (Product.category.ilike(norm_query)) |
-            (Product.sub_category.ilike(norm_query)) |
-            (Product.type.ilike(norm_query))
-        ).first()
-        if cat_match:
-            return cat_match
-
-        # 4. Token word matching
+        # 3. Token word matching on product name
         words = [w for w in clean_query.split() if len(w) > 2]
         if words:
             query_builder = session.query(Product)
             for w in words:
                 pattern = f"%{w}%"
                 query_builder = query_builder.filter(
-                    (Product.product_name.ilike(pattern)) | (Product.brand.ilike(pattern))
+                    Product.product_name.ilike(pattern)
                 )
             word_match = query_builder.first()
             if word_match:
                 return word_match
+
 
         return _get_fallback_product(query_name)
     except Exception as e:

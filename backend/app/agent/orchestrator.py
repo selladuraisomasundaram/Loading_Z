@@ -12,13 +12,14 @@ INTENT_SYSTEM_INSTRUCTION = (
     "You are an intent parser for a supermarket smart trolley assistant.\n"
     "Identify which tool to use and its argument based on the user's message.\n"
     "Available tools:\n"
-    "1. search_catalog(query): User searches for a product or asks about a store product name (e.g. 'Where is butter?', 'Find me milk').\n"
-    "2. get_route(destination): User asks for directions, path, route, navigation, or how to get somewhere (e.g. 'Show route to Aisle 3', 'Navigate to checkout').\n"
-    "3. check_inventory(sku): User asks about stock levels or checks inventory/price for a SKU format SKU-XXXXXX (e.g. 'Is SKU-E4B92C in stock?').\n"
-    "4. search_web(query): You have access to a web search tool. ONLY use it for general knowledge, recipes, or nutrition. NEVER use it to check product prices, stock, or aisles—assume store data requires the catalog tool.\n"
-    "5. conversational: Greetings, general conversation, or queries requiring no tools (e.g. 'Hi', 'Hello').\n\n"
+    "1. search_catalog(query): User searches for a single specific product or asks about a single product (e.g. 'Where is butter?', 'Find me milk', 'what is price of navarathna oil'). The argument MUST be JUST the product name, stripped of all filler words like 'price of', 'where is', 'what is'. Example: 'navarathna oil'.\n"
+    "2. query_database_nl(query): User asks a complex question requiring filtering, sorting, or aggregating multiple products (e.g. 'show me 10 products above 100', 'what are the cheapest snacks', 'list 5 drinks under 50'). The argument is the user's full request.\n"
+    "3. get_route(destination): User asks for directions, path, route, navigation, or how to get somewhere (e.g. 'Show route to Aisle 3', 'Navigate to checkout').\n"
+    "4. check_inventory(sku): User asks about stock levels or checks inventory/price for a SKU format SKU-XXXXXX (e.g. 'Is SKU-E4B92C in stock?').\n"
+    "5. search_web(query): You have access to a web search tool. ONLY use it for general knowledge, recipes, or nutrition. NEVER use it to check product prices, stock, or aisles.\n"
+    "6. conversational: Greetings, general conversation, or queries requiring no tools (e.g. 'Hi', 'Hello').\n\n"
     "Output valid JSON format with keys:\n"
-    "- 'tool': 'search_catalog', 'get_route', 'check_inventory', 'search_web', or 'conversational'\n"
+    "- 'tool': 'search_catalog', 'query_database_nl', 'get_route', 'check_inventory', 'search_web', or 'conversational'\n"
     "- 'argument': query, destination, SKU, or empty string."
 )
 
@@ -35,7 +36,7 @@ def fallback_parse_intent(message: str) -> Dict[str, Any]:
         return {"tool": "conversational", "argument": ""}
 
     # 1. Check for search_web (recipes, nutrition, health, general knowledge)
-    if any(w in lower for w in ("recipe", "cook", "how to make", "ingredients for", "nutrition", "calories", "healthy", "health benefits", "benefits of", "why is", "what is")):
+    if any(w in lower for w in ("recipe", "cook", "how to make", "ingredients for", "nutrition", "calories", "healthy", "health benefits", "benefits of", "pairs best with", "pairs with")):
         return {"tool": "search_web", "argument": message.strip()}
 
     # 2. Check for check_inventory (SKU)
@@ -55,7 +56,11 @@ def fallback_parse_intent(message: str) -> Dict[str, Any]:
         if any(w in lower for w in ("stock", "inventory", "left", "have", "qty", "quantity", "available", "check", "price")):
             return {"tool": "check_inventory", "argument": sku}
             
-    # 3. Check for get_route
+    # 3. Check for query_database_nl
+    if any(w in lower for w in ("above", "under", "less than", "more than", "cheapest", "most expensive", "list", "show me all", "how many", "filter", "sort by")):
+        return {"tool": "query_database_nl", "argument": message.strip()}
+
+    # 4. Check for get_route
     if any(w in lower for w in ("route", "path", "map", "navigate", "directions", "way to", "get to", "go to")):
         dest = "ENTRANCE"
         if "checkout" in lower:
@@ -76,12 +81,15 @@ def fallback_parse_intent(message: str) -> Dict[str, Any]:
         return {"tool": "get_route", "argument": dest}
         
     # 4. Check for search_catalog
-    if any(w in lower for w in ("find", "search", "where", "have", "buy", "get", "price of", "locate")):
+    if any(w in lower for w in ("find", "search", "where", "have", "buy", "get", "price of", "price", "locate")):
         query = lower
-        for word in ("where is", "where can i find", "do you have", "find", "search for", "locate", "price of", "price"):
+        # Remove filler words longest first
+        fillers = ["what is the price of", "what is price of", "what is the price for", "price of", "price for", "price", "where is", "where can i find", "do you have", "find", "search for", "locate"]
+        for word in fillers:
             if word in query:
                 query = query.replace(word, "")
         query = query.strip("? .,").strip()
+        query = " ".join(query.split()) # clean up extra spaces
         return {"tool": "search_catalog", "argument": query if query else lower}
         
     if len(lower.split()) <= 4 and lower not in ("hi", "hello", "hey", "who are you", "help"):
@@ -136,6 +144,9 @@ async def orchestrate_message(message: str) -> Dict[str, Any]:
     # 2. Execute selected tool
     if tool == "search_web":
         search_query = argument if argument else message
+        # Narrow down the web search to grocery/recipe domain to reduce irrelevant results (like dating apps)
+        if not any(w in search_query.lower() for w in ("grocery", "food", "recipe", "retail")):
+            search_query += " food recipe grocery"
         web_results = search_web(search_query)
         snippet_preview = web_results[:140] + "..." if len(web_results) > 140 else web_results
         tool_activity.append({
@@ -155,6 +166,63 @@ async def orchestrate_message(message: str) -> Dict[str, Any]:
             response_text = resp.get("message", {}).get("content", "").strip()
         except Exception:
             response_text = f"Here is what I found online regarding '{search_query}':\n\n{web_results}"
+
+    elif tool == "query_database_nl":
+        try:
+            schema_prompt = (
+                "You are an expert SQLite database developer.\n"
+                "Given the following table schema:\n"
+                "Table 'products': id (TEXT), product_name (TEXT), brand (TEXT), category (TEXT), sub_category (TEXT), sale_price (FLOAT), market_price (FLOAT), stock (INTEGER), aisle (TEXT), shelf (TEXT)\n"
+                f"User Request: {argument if argument else message}\n\n"
+                "Output ONLY a valid SQLite SELECT query. Do not include any formatting, markdown, or explanation."
+            )
+            sql_resp = await client.chat(model=model_name, messages=[{"role": "user", "content": schema_prompt}])
+            sql_query = sql_resp.get("message", {}).get("content", "").strip()
+            # Clean up markdown if model outputs it
+            if sql_query.startswith("```sql"): sql_query = sql_query[6:]
+            elif sql_query.startswith("```"): sql_query = sql_query[3:]
+            if sql_query.endswith("```"): sql_query = sql_query[:-3]
+            sql_query = sql_query.strip()
+            
+            tool_activity.append({
+                "step": "Gemma Text-to-SQL",
+                "action": "Generated SQL query",
+                "result": sql_query
+            })
+            
+            # Execute SQL safely (read-only SQLite query)
+            from app.core.database import engine
+            from sqlalchemy import text
+            results = []
+            with engine.connect() as conn:
+                result = conn.execute(text(sql_query))
+                results = [dict(row._mapping) for row in result.fetchmany(10)]
+                
+            tool_activity.append({
+                "step": "Database SQL Search",
+                "action": "Executed SQL",
+                "result": f"Returned {len(results)} rows"
+            })
+            
+            # Synthesize response
+            prompt = (
+                f"You are a helpful supermarket smart trolley assistant.\n"
+                f"User asked: {message}\n"
+                f"Database Results: {json.dumps(results)}\n\n"
+                f"Synthesize a clear, accurate, and concise natural language answer based on the database results. "
+                f"If there are multiple products, use a Markdown bulleted list. Do not mention the SQL query."
+            )
+            resp = await client.chat(model=model_name, messages=[{"role": "user", "content": prompt}])
+            response_text = resp.get("message", {}).get("content", "").strip()
+            
+        except Exception as e:
+            print(f"query_database_nl error: {e}", flush=True)
+            tool_activity.append({
+                "step": "Database SQL Search",
+                "action": "Error executing query",
+                "result": str(e)
+            })
+            response_text = "I encountered an error while searching the database for your request."
 
     elif tool == "search_catalog":
         prod_data = search_catalog(argument)

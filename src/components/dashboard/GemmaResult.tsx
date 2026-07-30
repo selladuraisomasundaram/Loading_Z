@@ -204,6 +204,41 @@ export const GemmaResult: React.FC = () => {
           </button>
         </div>
       </div>
+
+{/* Recommendations Carousel */}
+{gemmaResult.recommendations && gemmaResult.recommendations.length > 0 && (
+  <div className="mt-4">
+    <h4 className="text-sm font-semibold text-slate-800 mb-2">Recommended Products</h4>
+    <div className="flex overflow-x-auto gap-3 pb-2">
+      {gemmaResult.recommendations.map((rec, idx) => (
+        <div
+          key={rec.product_id ?? idx}
+          className="min-w-[150px] bg-white border border-slate-200 rounded-xl p-3 shadow-sm"
+        >
+          {rec.image_url && (
+            <img src={rec.image_url} alt={rec.product_name} className="w-full h-20 object-cover rounded" />
+          )}
+          <h5 className="mt-2 text-xs font-bold text-slate-900 truncate">{rec.product_name}</h5>
+          <p className="text-xs text-amber-600">{formatCurrency(rec.price)}</p>
+          <button
+            onClick={() => {
+              const { addItem } = useCart();
+              addItem({
+                id: rec.product_id,
+                name: rec.product_name,
+                price: rec.price,
+                quantity: 1,
+              });
+            }}
+            className="mt-1 w-full text-xs bg-sky-600 hover:bg-sky-500 text-white py-1 rounded"
+          >
+            Add to Cart
+          </button>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
     </div>
   );
 };

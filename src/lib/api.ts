@@ -29,7 +29,11 @@ const isMockMode = (): boolean => {
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
+<<<<<<< Updated upstream
   timeoutMs = 8000
+=======
+  timeoutMs = 120000 // 120 seconds timeout to accommodate local Gemma AI vision & LLM processing
+>>>>>>> Stashed changes
 ): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -213,13 +217,17 @@ export async function sendChatMessage(message: string): Promise<ChatMessage> {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message }),
+<<<<<<< Updated upstream
       }, 60000);
+=======
+      }, 120000); // Allow up to 120s for local Gemma AI assistant inference & web tool execution
+>>>>>>> Stashed changes
     } catch {
       response = await fetchWithTimeout(`${BASE_URL}/api/assistant/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message }),
-      }, 60000);
+      }, 120000);
     }
 
     if (!response.ok) {

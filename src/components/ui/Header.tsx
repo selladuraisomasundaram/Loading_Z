@@ -68,7 +68,7 @@ export const Header: React.FC = () => {
               </p>
               <p className="text-xs font-semibold text-slate-700 flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Gemma 2B Vision • Online
+                Gemma4: E4B Vision • Online
               </p>
             </div>
           </div>

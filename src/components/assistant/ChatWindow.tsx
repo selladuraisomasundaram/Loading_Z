@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Bot,
   User,
@@ -15,6 +15,7 @@ import {
 import { useCart } from "@/hooks/useCart";
 import { ChatMessage } from "@/types";
 import { sendChatMessage } from "@/lib/api";
+import ReactMarkdown from "react-markdown";
 
 export interface ChatWindowProps {
   onSelectMessage?: (msg: ChatMessage) => void;
@@ -25,12 +26,13 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
   const [isMicActive, setIsMicActive] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "msg-init-1",
       sender: "assistant",
-      text: "Hello! I am your Gemma AI Shopping Assistant. How can I assist you with product locations, dietary recommendations, or aisle routes today?",
+      text: "Hello! I am your Gemma AI Shopping Assistant. How can I assist you with product locations, dietary recommendations, or store catalog queries today?",
       timestamp: new Date().toLocaleTimeString(),
       toolActivity: [
         { step: "🧠 Intent Analysis", action: "Initialized chat session" },
@@ -38,6 +40,45 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
       ],
     },
   ]);
+
+  // Auto-scroll to latest message
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isProcessing]);
+
+  // Speech recognition effect
+  useEffect(() => {
+    if (!isMicActive) return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn("Web Speech API not supported in this browser.");
+      setIsMicActive(false);
+      return;
+    }
+    const recognizer = new SpeechRecognition();
+    recognizer.lang = "en-US";
+    recognizer.interimResults = false;
+    recognizer.maxAlternatives = 1;
+
+    recognizer.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript.trim();
+      if (transcript) {
+        setInputValue(transcript);
+        handleSendMessage(transcript);
+      }
+    };
+    recognizer.onerror = (e: any) => {
+      console.error("Speech recognition error", e);
+    };
+    recognizer.onend = () => {
+      // Stop mic when recognition ends
+      setIsMicActive(false);
+    };
+    recognizer.start();
+    return () => {
+      recognizer.stop();
+    };
+  }, [isMicActive]);
 
   const handleSendMessage = async (customText?: string) => {
     const textToSend = customText || inputValue;
@@ -64,6 +105,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
         sender: "assistant",
         text: "AI Assistant service unavailable. Please check your backend connection or try again.",
         timestamp: new Date().toLocaleTimeString(),
+        toolActivity: [{ step: "Network Error", action: "Failed to connect to backend", result: "Timeout" }],
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
@@ -72,43 +114,37 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
   };
 
   const handleShowOnMap = (aisle: string) => {
-    // Navigate to Store Map tab smoothly while preserving target aisle context
-    if (aisle) {
-      setActiveTab("map");
-    }
+    setActiveTab("map");
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl text-white flex flex-col h-full min-h-[540px] space-y-4">
+    <div className="flex flex-col h-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div className="flex items-center space-x-2.5">
-          <div className="p-2 bg-purple-500/10 border border-purple-500/20 rounded-xl text-purple-400">
+      <div className="bg-slate-950 p-4 border-b border-slate-800 flex items-center justify-between z-10 shrink-0 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-purple-500/20 text-purple-400 rounded-xl">
             <Bot className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="font-extrabold text-slate-100 text-sm">
+            <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
               Gemma AI Voice & Chat Engine
-            </h3>
-            <p className="text-[11px] text-slate-400 font-mono">
+            </h2>
+            <p className="text-[10px] text-slate-500 font-mono">
               Autonomous Function Orchestration
             </p>
           </div>
         </div>
-
-        {/* Mic Toggle Button */}
         <button
-          type="button"
           onClick={() => setIsMicActive(!isMicActive)}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all shadow-sm ${
             isMicActive
-              ? "bg-rose-500/20 border-rose-500 text-rose-300 animate-pulse shadow-sm"
-              : "bg-slate-800 border-slate-700 text-slate-300 hover:text-white"
+              ? "bg-rose-500 text-white animate-pulse shadow-rose-500/20"
+              : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
           }`}
         >
           {isMicActive ? (
             <>
-              <Mic className="w-3.5 h-3.5 text-rose-400" />
+              <Mic className="w-3.5 h-3.5" />
               <span>Listening...</span>
             </>
           ) : (
@@ -121,7 +157,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
       </div>
 
       {/* Messages Thread */}
-      <div className="flex-1 bg-slate-950/90 border border-slate-800/80 rounded-xl p-4 overflow-y-auto space-y-4 max-h-[380px]">
+      <div className="flex-1 bg-slate-950/90 border border-slate-800/80 rounded-xl p-4 overflow-y-auto space-y-4 max-h-[480px]">
         {messages.map((msg) => {
           const isBot = msg.sender === "assistant";
           return (
@@ -141,11 +177,15 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
               <div
                 className={`p-3.5 rounded-2xl max-w-[85%] space-y-2.5 ${
                   isBot
-                    ? "bg-slate-900 border border-slate-800 text-slate-200 shadow-md"
+                    ? "bg-slate-900 border border-slate-800 text-slate-200 shadow-md prose prose-invert prose-sm"
                     : "bg-sky-600 text-white font-medium shadow-md"
                 }`}
               >
-                <p className="leading-relaxed">{msg.text}</p>
+                {isBot ? (
+                  <ReactMarkdown>{msg.text}</ReactMarkdown>
+                ) : (
+                  <p className="leading-relaxed">{msg.text}</p>
+                )}
 
                 {/* Web Research Indicator Badge */}
                 {isBot && msg.webSearchUsed && (
@@ -193,6 +233,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
             <span>Gemma AI is reasoning & querying catalog...</span>
           </div>
         )}
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Quick Action Suggestion Chips */}
