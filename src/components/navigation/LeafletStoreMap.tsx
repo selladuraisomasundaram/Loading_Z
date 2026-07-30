@@ -7,6 +7,7 @@ import {
   Marker,
   Popup,
   Tooltip,
+  Polyline,
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -23,6 +24,8 @@ import {
 interface LeafletStoreMapProps {
   selectedProduct?: any;
   userLocation?: [number, number];
+  routeWaypoints?: [number, number][];
+  stops?: any[];
 }
 
 const createIcon = (emoji: string, bgColor: string) =>
@@ -44,6 +47,8 @@ const icons = {
 export default function LeafletStoreMap({
   selectedProduct,
   userLocation = [625, 125], // Default near entrance
+  routeWaypoints = [],
+  stops = [],
 }: LeafletStoreMapProps) {
   const [mounted, setMounted] = useState(false);
 
@@ -53,31 +58,38 @@ export default function LeafletStoreMap({
 
   if (!mounted) {
     return (
-      <div className="w-full h-[600px] bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-center">
+      <div className="w-full h-full min-h-[500px] bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-center">
         <p className="text-slate-400 font-medium">Loading Interactive Map...</p>
       </div>
     );
   }
 
-  // Determine if the product is uncataloged/unknown
-  const isUnknownProduct = selectedProduct && (!selectedProduct.aisleId || selectedProduct.aisleId === "A99" || selectedProduct.id?.startsWith("WEB-"));
-  const targetAisleId = isUnknownProduct ? "A99" : selectedProduct?.aisleId || selectedProduct?.location?.aisleId;
-  const targetAisle = STORE_AISLES.find((a) => a.id === targetAisleId) || (isUnknownProduct ? AISLE_UNKNOWN : null);
-
-  const productLocation: [number, number] | null = targetAisle
-    ? [
-        targetAisle.bounds[0][0] + (targetAisle.bounds[1][0] - targetAisle.bounds[0][0]) / 2,
-        targetAisle.bounds[0][1] + (targetAisle.bounds[1][1] - targetAisle.bounds[0][1]) / 2,
-      ]
-    : null;
+  // Handle single product fallback if `stops` is not provided
+  let displayStops = stops;
+  if (stops.length === 0 && selectedProduct) {
+    const isUnknownProduct = !selectedProduct.aisleId || selectedProduct.aisleId === "A99" || selectedProduct.id?.startsWith("WEB-");
+    const targetAisleId = isUnknownProduct ? "A99" : selectedProduct?.aisleId || selectedProduct?.location?.aisleId;
+    const targetAisle = STORE_AISLES.find((a) => a.id === targetAisleId) || (isUnknownProduct ? AISLE_UNKNOWN : null);
+    
+    if (targetAisle) {
+      displayStops = [{
+        product_name: selectedProduct.name || selectedProduct.productName,
+        category: selectedProduct.category,
+        price: selectedProduct.price,
+        x: targetAisle.bounds[0][0] + (targetAisle.bounds[1][0] - targetAisle.bounds[0][0]) / 2,
+        y: targetAisle.bounds[0][1] + (targetAisle.bounds[1][1] - targetAisle.bounds[0][1]) / 2,
+        is_web_item: isUnknownProduct
+      }];
+    }
+  }
 
   return (
-    <div className="w-full h-[600px] border border-slate-200 rounded-2xl overflow-hidden relative shadow-sm">
+    <div className="w-full h-full min-h-[500px] border border-slate-200 rounded-2xl overflow-hidden relative shadow-sm flex flex-col">
       <MapContainer
         crs={L.CRS.Simple}
         bounds={MAP_BOUNDS}
         maxBounds={MAP_BOUNDS}
-        style={{ height: "100%", width: "100%", background: "#f8fafc" }}
+        style={{ flex: 1, width: "100%", background: "#f8fafc" }}
         zoomControl={true}
         attributionControl={false}
         scrollWheelZoom={true}
@@ -133,24 +145,47 @@ export default function LeafletStoreMap({
           <Popup>You are here</Popup>
         </Marker>
 
-        {/* Target Product Location */}
-        {selectedProduct && productLocation && (
-          <Marker position={productLocation} icon={isUnknownProduct ? icons.unknown : icons.product}>
+        {/* Render TSP Route Polyline */}
+        {routeWaypoints.length > 0 && (
+          <Polyline 
+            positions={routeWaypoints} 
+            pathOptions={{ color: "#3b82f6", weight: 4, dashArray: "10, 10", opacity: 0.8 }} 
+          />
+        )}
+
+        {/* Target Product Locations (Stops) */}
+        {displayStops.map((stop, idx) => (
+          <Marker 
+            key={idx} 
+            position={[stop.x, stop.y]} 
+            icon={stop.is_web_item ? icons.unknown : icons.product}
+          >
             <Popup className="rounded-xl overflow-hidden font-sans">
               <div className="p-1 min-w-[200px]">
-                <h4 className="font-bold text-slate-900 mb-1">{selectedProduct.name || selectedProduct.productName}</h4>
-                <p className="text-sm text-slate-500 mb-2">{selectedProduct.category}</p>
+                <h4 className="font-bold text-slate-900 mb-1">{stop.product_name}</h4>
+                {stop.category && <p className="text-sm text-slate-500 mb-2">{stop.category}</p>}
                 <div className="flex items-center justify-between text-sm">
-                  <span className="font-bold text-sky-600">${selectedProduct.price?.toFixed(2) || "0.00"}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${isUnknownProduct ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
-                    {isUnknownProduct ? "Special Request" : "In Stock"}
+                  {stop.price && <span className="font-bold text-sky-600">${stop.price?.toFixed(2) || "0.00"}</span>}
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${stop.is_web_item ? 'bg-purple-100 text-purple-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                    {stop.is_web_item ? 'Uncataloged Item' : 'In Stock'}
                   </span>
                 </div>
               </div>
             </Popup>
           </Marker>
-        )}
+        ))}
       </MapContainer>
+      
+      {/* Map Legend */}
+      <div className="bg-white border-t border-slate-200 p-3 flex flex-wrap items-center justify-center gap-4 text-xs font-medium text-slate-600">
+        <div className="flex items-center gap-1.5"><span className="text-lg">🛒</span> You are here</div>
+        <div className="flex items-center gap-1.5"><span className="text-lg">🟢</span> In Stock Item</div>
+        <div className="flex items-center gap-1.5"><span className="text-lg">🟣</span> Uncataloged (Zone 99)</div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-6 h-1 border-b-4 border-blue-500 border-dashed opacity-80"></div>
+          Optimized TSP Route
+        </div>
+      </div>
     </div>
   );
 }

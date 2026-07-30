@@ -43,7 +43,7 @@ export const ProductSearchMap: React.FC<ProductSearchMapProps> = ({
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+    <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4 max-h-[350px] overflow-y-auto custom-scrollbar">
       {/* Header & Clear Trigger */}
       <div className="flex items-center justify-between border-b border-slate-100 pb-3">
         <div className="flex items-center space-x-2.5">
@@ -77,7 +77,7 @@ export const ProductSearchMap: React.FC<ProductSearchMapProps> = ({
           <Bot className="w-3.5 h-3.5 text-purple-600" />
           <span>Gemma Voice Queries (Try clicking an intent query below):</span>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex overflow-x-auto items-center gap-2 pb-2 custom-scrollbar no-scrollbar">
           {sampleVoiceQueries.map((q, idx) => (
             <button
               key={idx}

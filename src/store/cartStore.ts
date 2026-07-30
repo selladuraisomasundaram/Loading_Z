@@ -131,7 +131,7 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
     currentWeightGrams: 0,
     expectedWeightGrams: 0,
     isStable: true,
-    statusText: "Ready",
+    statusText: "Stable",
     lastUpdated: new Date().toLocaleTimeString(),
   },
 
@@ -222,16 +222,16 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
       };
 
       const result: GemmaDetectionResult = {
-        product_id: p.product_id || p.sku || "WEB-ITEM",
+        product_id: p.product_id || (p as any).sku || "WEB-ITEM",
         product_name: p.product_name,
         brand: p.brand,
         category: p.category,
         sub_category: p.sub_category,
         price: p.price,
-        confidence: p.confidence || p.gemma_confidence || 0.9,
+        confidence: p.confidence || (p as any).gemma_confidence || 0.9,
         verified: p.verified,
-        estimatedWeightGrams: p.estimatedWeightGrams || p.weightGrams || generateWeight(p.product_name),
-        imageUrl: p.image_url || undefined,
+        estimatedWeightGrams: p.estimatedWeightGrams || (p as any).weightGrams || generateWeight(p.product_name),
+        imageUrl: p.image_url || (p as any).imageUrl || undefined,
         detectedAt: new Date().toLocaleTimeString(),
       };
 
@@ -268,7 +268,7 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
   },
 
   addItem: (product: Product) => {
-    const { items, loadCell } = get();
+    const { items } = get();
     const existingIndex = items.findIndex((i) => i.product.id === product.id);
 
     let updatedItems: CartItemType[];
@@ -302,7 +302,7 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
   },
 
   removeItem: (productId: string) => {
-    const { items, loadCell } = get();
+    const { items } = get();
     const updatedItems = items.filter((i) => i.product.id !== productId);
     const totals = calculateCartTotals(updatedItems);
 
@@ -320,7 +320,7 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
   },
 
   increaseQuantity: (productId: string) => {
-    const { items, loadCell } = get();
+    const { items } = get();
     const updatedItems = items.map((item) =>
       item.product.id === productId
         ? { ...item, quantity: item.quantity + 1 }
@@ -341,7 +341,7 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
   },
 
   decreaseQuantity: (productId: string) => {
-    const { items, loadCell } = get();
+    const { items } = get();
     const updatedItems = items.map((item) => {
       if (item.product.id === productId) {
         const newQty = Math.max(1, item.quantity - 1);
@@ -365,7 +365,7 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
   },
 
   clearCart: () => {
-    set((state) => ({
+    set(() => ({
       items: [],
       itemCount: 0,
       subtotal: 0,
