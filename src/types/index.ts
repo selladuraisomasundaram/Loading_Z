@@ -2,6 +2,8 @@ export * from "./api";
 export * from "./recommendation";
 export * from "./sensor";
 
+export type ActiveTab = "dashboard" | "assistant" | "map" | "settings";
+
 export type DetectionStatus = "idle" | "uploading" | "analyzing" | "success" | "error";
 
 export interface Product {

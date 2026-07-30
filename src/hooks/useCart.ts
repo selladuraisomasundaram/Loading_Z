@@ -3,6 +3,9 @@
 import { useCartStore } from "@/store/cartStore";
 
 export function useCart() {
+  const activeTab = useCartStore((state) => state.activeTab);
+  const setActiveTab = useCartStore((state) => state.setActiveTab);
+
   const items = useCartStore((state) => state.items);
   const itemCount = useCartStore((state) => state.itemCount);
   const subtotal = useCartStore((state) => state.subtotal);
@@ -48,6 +51,8 @@ export function useCart() {
   const processCheckout = useCartStore((state) => state.processCheckout);
 
   return {
+    activeTab,
+    setActiveTab,
     items,
     itemCount,
     subtotal,

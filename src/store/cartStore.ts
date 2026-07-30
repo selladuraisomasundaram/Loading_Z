@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import {
+  ActiveTab,
   CartItemType,
   DetectionStatus,
   GemmaDetectionResult,
@@ -20,6 +21,10 @@ const ALLOWED_MIME_TYPES = [
 const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
 
 export interface CartStoreState {
+  // Navigation Tab State
+  activeTab: ActiveTab;
+  setActiveTab: (tab: ActiveTab) => void;
+
   // Cart State
   items: CartItemType[];
   itemCount: number;
@@ -151,6 +156,11 @@ function calculateCartTotals(items: CartItemType[]) {
 const initialTotals = calculateCartTotals(initialMockCartItems);
 
 export const useCartStore = create<CartStoreState>((set, get) => ({
+  // Navigation State
+  activeTab: "dashboard",
+  setActiveTab: (tab: ActiveTab) => set({ activeTab: tab }),
+
+  // Cart State
   items: initialMockCartItems,
   itemCount: initialTotals.itemCount,
   subtotal: initialTotals.subtotal,
@@ -346,7 +356,6 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
       },
     });
 
-    // Refresh recommendations asynchronously
     get().fetchRecommendations();
   },
 
