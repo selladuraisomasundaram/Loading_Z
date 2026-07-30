@@ -23,15 +23,20 @@ async def identify_product_from_image(image_bytes: bytes) -> Dict[str, Any]:
     model_name = os.getenv("GEMMA_MODEL", GEMMA_MODEL)
 
     try:
-        response = await client.chat(
-            model=model_name,
-            messages=[{
-                "role": "user",
-                "content": SYSTEM_INSTRUCTION,
-                "images": [image_bytes]
-            }],
-            format="json"
+        import asyncio
+        response = await asyncio.wait_for(
+            client.chat(
+                model=model_name,
+                messages=[{
+                    "role": "user",
+                    "content": SYSTEM_INSTRUCTION,
+                    "images": [image_bytes]
+                }],
+                format="json"
+            ),
+            timeout=3.0
         )
+
 
         content = response.get("message", {}).get("content", "")
         if not content:

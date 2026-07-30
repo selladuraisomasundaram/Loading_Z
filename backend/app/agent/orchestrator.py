@@ -98,14 +98,19 @@ async def orchestrate_message(message: str) -> Dict[str, Any]:
     argument = ""
     
     try:
-        response = await client.chat(
-            model=model_name,
-            messages=[{
-                "role": "user",
-                "content": f"{INTENT_SYSTEM_INSTRUCTION}\nUser message: {message}"
-            }],
-            format="json"
+        import asyncio
+        response = await asyncio.wait_for(
+            client.chat(
+                model=model_name,
+                messages=[{
+                    "role": "user",
+                    "content": f"{INTENT_SYSTEM_INSTRUCTION}\nUser message: {message}"
+                }],
+                format="json"
+            ),
+            timeout=3.0
         )
+
         content = response.get("message", {}).get("content", "")
         parsed = json.loads(content)
         tool = str(parsed.get("tool", "conversational")).strip()

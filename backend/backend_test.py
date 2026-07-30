@@ -16,19 +16,19 @@ BASE_URL = "http://127.0.0.1:8000"
 
 def is_server_running() -> bool:
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(0.2)
-        result = s.connect_ex(('127.0.0.1', 8000))
-        s.close()
-        return result == 0
+        url = f"{BASE_URL}/health"
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=1.0) as resp:
+            return resp.status == 200
     except Exception:
         return False
 
 def safe_print(text: str):
     try:
-        print(text)
+        print(text, flush=True)
     except UnicodeEncodeError:
-        print(text.encode('ascii', errors='backslashreplace').decode('ascii'))
+        print(text.encode('ascii', errors='backslashreplace').decode('ascii'), flush=True)
+    sys.stdout.flush()
 
 def run_tests():
     live_mode = is_server_running()
@@ -60,15 +60,16 @@ def run_tests():
                 if headers:
                     for k, v in headers.items():
                         req.add_header(k, v)
-                with urllib.request.urlopen(req, timeout=120) as resp:
+                with urllib.request.urlopen(req, timeout=5) as resp:
                     return resp.status, json.loads(resp.read().decode('utf-8'))
-            except (urllib.error.URLError, ConnectionError, OSError):
-                # Live server dropped connection, fallback to TestClient
+            except Exception as live_err:
+                # Live server request failed, fallback to in-memory TestClient
                 live_mode = False
-                if client is None:
-                    from fastapi.testclient import TestClient
-                    from main import app
-                    client = TestClient(app)
+
+        if client is None:
+            from fastapi.testclient import TestClient
+            from main import app
+            client = TestClient(app)
 
         kw = {}
         if headers:
