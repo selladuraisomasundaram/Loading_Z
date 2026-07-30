@@ -7,9 +7,6 @@
   "chai": ["marie biscuits", "sugar", "condensed milk", "rusk"],
   "rice": ["toor dal", "ghee", "sambar powder", "papad"],
   "toothpaste": ["toothbrush", "mouthwash", "tongue cleaner"],
-  "pepsodent": ["toothbrush", "mouthwash", "tongue cleaner"],
-  "colgate": ["toothbrush", "mouthwash", "tongue cleaner"],
-  "sensodyne": ["toothbrush", "mouthwash", "tongue cleaner"],
   "soap": ["handwash", "conditioner", "body wash"],
   "shampoo": ["handwash", "conditioner", "body wash"]
 }

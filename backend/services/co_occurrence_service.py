@@ -17,35 +17,26 @@ def load_json_file(path: str, default_val=None):
     except Exception:
         return default_val
 
-def get_co_occurrence_candidates(cart_items: List[str], current_scanned_item: str = None) -> List[str]:
+def get_co_occurrence_candidates(cart_items: List[str]) -> List[str]:
     """
     Returns complimentary items based on Indian FMCG co-occurrence rules.
     If the cart is empty, returns cold-start staples.
     """
     staples = load_json_file(STAPLES_PATH, default_val=[])
     
-    combined_cart = list(cart_items)
-    if current_scanned_item and current_scanned_item not in combined_cart:
-        combined_cart.append(current_scanned_item)
-        
-    if not combined_cart:
+    if not cart_items:
         return staples
         
     rules = load_json_file(FMCG_RULES_PATH, default_val={})
     candidates_score = {}
     
-    current_lower = current_scanned_item.lower() if current_scanned_item else ""
-    
-    for item in combined_cart:
+    for item in cart_items:
         item_lower = item.lower()
-        # Give a massive score boost (e.g. +10) if the rule matched the most recently scanned item
-        weight = 10 if item_lower == current_lower else 1
-        
         # Find which rules apply to this cart item
         for key, recommendations in rules.items():
             if key in item_lower:
                 for rec in recommendations:
-                    candidates_score[rec] = candidates_score.get(rec, 0) + weight
+                    candidates_score[rec] = candidates_score.get(rec, 0) + 1
                     
     if not candidates_score:
         return staples
