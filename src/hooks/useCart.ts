@@ -10,8 +10,11 @@ export function useCart() {
   const tax = useCartStore((state) => state.tax);
   const total = useCartStore((state) => state.total);
 
+  const selectedFile = useCartStore((state) => state.selectedFile);
   const uploadedImage = useCartStore((state) => state.uploadedImage);
   const uploadedFileName = useCartStore((state) => state.uploadedFileName);
+  const uploadedFileSize = useCartStore((state) => state.uploadedFileSize);
+  const fileError = useCartStore((state) => state.fileError);
   const isAnalyzing = useCartStore((state) => state.isAnalyzing);
   const gemmaResult = useCartStore((state) => state.gemmaResult);
   const loadCell = useCartStore((state) => state.loadCell);
@@ -26,9 +29,11 @@ export function useCart() {
   const decreaseQuantity = useCartStore((state) => state.decreaseQuantity);
   const clearCart = useCartStore((state) => state.clearCart);
 
-  const uploadImage = useCartStore((state) => state.uploadImage);
+  const selectFile = useCartStore((state) => state.selectFile);
   const removeImage = useCartStore((state) => state.removeImage);
-  const analyzeImage = useCartStore((state) => state.analyzeImage);
+  const analyzeSelectedFile = useCartStore(
+    (state) => state.analyzeSelectedFile
+  );
   const addGemmaResultToCart = useCartStore(
     (state) => state.addGemmaResultToCart
   );
@@ -43,8 +48,11 @@ export function useCart() {
     discount,
     tax,
     total,
+    selectedFile,
     uploadedImage,
     uploadedFileName,
+    uploadedFileSize,
+    fileError,
     isAnalyzing,
     gemmaResult,
     loadCell,
@@ -55,9 +63,9 @@ export function useCart() {
     increaseQuantity,
     decreaseQuantity,
     clearCart,
-    uploadImage,
+    selectFile,
     removeImage,
-    analyzeImage,
+    analyzeSelectedFile,
     addGemmaResultToCart,
     addRecommendationToCart,
   };

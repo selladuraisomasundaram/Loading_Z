@@ -6,9 +6,19 @@ import {
   Product,
   RecommendationItem,
 } from "@/types";
+import { identifyProduct } from "@/lib/api";
+
+const ALLOWED_MIME_TYPES = [
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+];
+
+const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
 
 export interface CartStoreState {
-  // Required Cart State
+  // Cart State
   items: CartItemType[];
   itemCount: number;
   subtotal: number;
@@ -16,9 +26,12 @@ export interface CartStoreState {
   tax: number;
   total: number;
 
-  // Vision Analysis State
+  // Image & Vision Analysis State
+  selectedFile: File | null;
   uploadedImage: string | null;
   uploadedFileName: string | null;
+  uploadedFileSize: number | null;
+  fileError: string | null;
   isAnalyzing: boolean;
   gemmaResult: GemmaDetectionResult | null;
 
@@ -29,23 +42,22 @@ export interface CartStoreState {
   recommendations: RecommendationItem[];
   isRecommendationsLoading: boolean;
 
-  // Required Cart Actions
+  // Actions
+  selectFile: (file: File) => boolean; // Returns true if valid file selected
+  removeImage: () => void;
+  analyzeSelectedFile: () => Promise<void>;
+  addGemmaResultToCart: () => void;
+
   addItem: (product: Product) => void;
   removeItem: (productId: string) => void;
   increaseQuantity: (productId: string) => void;
   decreaseQuantity: (productId: string) => void;
   clearCart: () => void;
 
-  // Helper Actions
-  uploadImage: (file: File) => void;
-  removeImage: () => void;
-  analyzeImage: () => void;
-  addGemmaResultToCart: () => void;
   addRecommendationToCart: (recId: string) => void;
   updateLoadCellWeight: (weightGrams: number, isStable?: boolean) => void;
 }
 
-// Initial Mock Catalog Products
 const initialMockCartItems: CartItemType[] = [
   {
     product: {
@@ -112,17 +124,14 @@ const initialRecommendations: RecommendationItem[] = [
   },
 ];
 
-// Helper to deterministically compute totals
 function calculateCartTotals(items: CartItemType[]) {
   const itemCount = items.reduce((acc, curr) => acc + curr.quantity, 0);
   const subtotal = items.reduce(
     (acc, curr) => acc + curr.product.price * curr.quantity,
     0
   );
-  // Promotional discount rule
   const discount = subtotal > 150 ? 15.0 : 0;
   const taxableAmount = Math.max(0, subtotal - discount);
-  // GST Tax at 18%
   const tax = Math.round(taxableAmount * 0.18 * 100) / 100;
   const total = Math.round((taxableAmount + tax) * 100) / 100;
   const expectedWeightGrams = items.reduce(
@@ -143,7 +152,6 @@ function calculateCartTotals(items: CartItemType[]) {
 const initialTotals = calculateCartTotals(initialMockCartItems);
 
 export const useCartStore = create<CartStoreState>((set, get) => ({
-  // State
   items: initialMockCartItems,
   itemCount: initialTotals.itemCount,
   subtotal: initialTotals.subtotal,
@@ -151,8 +159,11 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
   tax: initialTotals.tax,
   total: initialTotals.total,
 
+  selectedFile: null,
   uploadedImage: null,
   uploadedFileName: null,
+  uploadedFileSize: null,
+  fileError: null,
   isAnalyzing: false,
   gemmaResult: {
     productName: "Dark Chocolate Almond Bar 100g",
@@ -176,21 +187,106 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
   recommendations: initialRecommendations,
   isRecommendationsLoading: false,
 
-  // Rule 1 & 2: addItem(product)
+  // Select file & validate format (accept JPG, JPEG, PNG, WEBP)
+  selectFile: (file: File) => {
+    const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
+    const isValidType =
+      ALLOWED_MIME_TYPES.includes(file.type.toLowerCase()) ||
+      ALLOWED_EXTENSIONS.includes(ext);
+
+    if (!isValidType) {
+      set({
+        fileError: `Unsupported file type "${file.name}". Please upload a JPG, JPEG, PNG, or WEBP image.`,
+      });
+      return false;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      set({
+        selectedFile: file,
+        uploadedImage: e.target?.result as string,
+        uploadedFileName: file.name,
+        uploadedFileSize: file.size,
+        fileError: null,
+      });
+    };
+    reader.readAsDataURL(file);
+    return true;
+  },
+
+  removeImage: () => {
+    set({
+      selectedFile: null,
+      uploadedImage: null,
+      uploadedFileName: null,
+      uploadedFileSize: null,
+      fileError: null,
+      gemmaResult: null,
+    });
+  },
+
+  // Calls identifyProduct(file) abstraction layer
+  analyzeSelectedFile: async () => {
+    const { selectedFile, uploadedImage } = get();
+    if (!selectedFile && !uploadedImage) {
+      set({ fileError: "Please upload an image before analyzing." });
+      return;
+    }
+
+    set({ isAnalyzing: true, fileError: null });
+
+    try {
+      // Use selected file or create dummy file fallback if loaded from initial state
+      const targetFile =
+        selectedFile ||
+        new File(["dummy"], "product.jpg", { type: "image/jpeg" });
+
+      // Call API abstraction function
+      const result = await identifyProduct(targetFile);
+
+      set({
+        gemmaResult: result,
+        isAnalyzing: false,
+      });
+    } catch (err: unknown) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to analyze image.";
+      set({
+        fileError: errorMessage,
+        isAnalyzing: false,
+      });
+    }
+  },
+
+  addGemmaResultToCart: () => {
+    const { gemmaResult } = get();
+    if (!gemmaResult) return;
+
+    const product: Product = {
+      id: `prod-gemma-${Date.now()}`,
+      name: gemmaResult.productName,
+      brand: gemmaResult.brand,
+      category: gemmaResult.category,
+      price: gemmaResult.suggestedPrice,
+      weightGrams: gemmaResult.estimatedWeightGrams,
+    };
+
+    get().addItem(product);
+  },
+
   addItem: (product: Product) => {
     const { items, loadCell } = get();
     const existingIndex = items.findIndex((i) => i.product.id === product.id);
 
     let updatedItems: CartItemType[];
     if (existingIndex > -1) {
-      // Rule 1: Adding existing product increases quantity
       updatedItems = items.map((item, idx) =>
         idx === existingIndex
           ? { ...item, quantity: item.quantity + 1 }
           : item
       );
     } else {
-      // Rule 2: Adding new product creates a cart item
       updatedItems = [
         ...items,
         { product, quantity: 1, addedAt: new Date().toISOString() },
@@ -217,7 +313,6 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
     });
   },
 
-  // Rule 4: removeItem(productId) completely deletes product
   removeItem: (productId: string) => {
     const { items, loadCell } = get();
     const updatedItems = items.filter((i) => i.product.id !== productId);
@@ -241,7 +336,6 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
     });
   },
 
-  // increaseQuantity(productId)
   increaseQuantity: (productId: string) => {
     const { items, loadCell } = get();
     const updatedItems = items.map((item) =>
@@ -269,12 +363,10 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
     });
   },
 
-  // Rule 3: decreaseQuantity(productId) - quantity cannot become less than 1
   decreaseQuantity: (productId: string) => {
     const { items, loadCell } = get();
     const updatedItems = items.map((item) => {
       if (item.product.id === productId) {
-        // Clamped at minimum 1
         const newQty = Math.max(1, item.quantity - 1);
         return { ...item, quantity: newQty };
       }
@@ -301,7 +393,6 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
     });
   },
 
-  // clearCart()
   clearCart: () => {
     set((state) => ({
       items: [],
@@ -319,64 +410,6 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
         lastUpdated: new Date().toLocaleTimeString(),
       },
     }));
-  },
-
-  // Helper Actions
-  uploadImage: (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      set({
-        uploadedImage: e.target?.result as string,
-        uploadedFileName: file.name,
-      });
-    };
-    reader.readAsDataURL(file);
-  },
-
-  removeImage: () => {
-    set({
-      uploadedImage: null,
-      uploadedFileName: null,
-      gemmaResult: null,
-    });
-  },
-
-  analyzeImage: () => {
-    set({ isAnalyzing: true });
-    setTimeout(() => {
-      // Rule 6 & 7: Verified price comes from product database, not raw model output
-      const mockResult: GemmaDetectionResult = {
-        productName: "Almond Milk Unsweetened 1L",
-        brand: "Silk Fresh",
-        category: "Dairy Alternatives",
-        confidence: 0.982,
-        estimatedWeightGrams: 1020,
-        verificationStatus: "Verified",
-        suggestedPrice: 190.0,
-        detectedAt: new Date().toLocaleTimeString(),
-      };
-      set({
-        isAnalyzing: false,
-        gemmaResult: mockResult,
-      });
-    }, 1200);
-  },
-
-  addGemmaResultToCart: () => {
-    const { gemmaResult } = get();
-    if (!gemmaResult) return;
-
-    // Rule 6 & 7: Price comes from product catalog object
-    const product: Product = {
-      id: `prod-gemma-${Date.now()}`,
-      name: gemmaResult.productName,
-      brand: gemmaResult.brand,
-      category: gemmaResult.category,
-      price: gemmaResult.suggestedPrice,
-      weightGrams: gemmaResult.estimatedWeightGrams,
-    };
-
-    get().addItem(product);
   },
 
   addRecommendationToCart: (recId: string) => {
