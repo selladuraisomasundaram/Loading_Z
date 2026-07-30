@@ -1,4 +1,4 @@
-import { GemmaDetectionResult } from "@/types";
+import { GemmaDetectionResult, Recommendation, CartItemType } from "@/types";
 
 const mockVisionCatalog: Omit<GemmaDetectionResult, "detectedAt">[] = [
   {
@@ -36,9 +36,50 @@ const mockVisionCatalog: Omit<GemmaDetectionResult, "detectedAt">[] = [
   },
 ];
 
+const mockRecommendationsCatalog: Recommendation[] = [
+  {
+    id: "rec-001",
+    title: "You may also like",
+    product: {
+      id: "SKU-000301",
+      name: "Tomato Ketchup 500g",
+      brand: "Heinz",
+      category: "Condiments",
+      price: 99.0,
+      weightGrams: 500,
+    },
+    reason: "Pairs well with items in your cart",
+  },
+  {
+    id: "rec-002",
+    title: "Frequently Bought Together",
+    product: {
+      id: "SKU-000302",
+      name: "Unsalted Creamery Butter 200g",
+      brand: "Amul",
+      category: "Dairy",
+      price: 58.0,
+      weightGrams: 200,
+    },
+    reason: "Frequently bought with Sourdough Bread",
+  },
+  {
+    id: "rec-003",
+    title: "Trending in Pantry",
+    product: {
+      id: "SKU-000303",
+      name: "Classic Roasted Oats 500g",
+      brand: "Quaker",
+      category: "Breakfast Cereal",
+      price: 185.0,
+      weightGrams: 500,
+    },
+    reason: "Popular healthy breakfast choice",
+  },
+];
+
 /**
  * Mock API service simulating Vision AI inference on uploaded image files.
- * Provides a 1.2-second network latency simulation.
  */
 export async function mockIdentifyProduct(file: File): Promise<GemmaDetectionResult> {
   await new Promise((resolve) => setTimeout(resolve, 1200));
@@ -50,4 +91,15 @@ export async function mockIdentifyProduct(file: File): Promise<GemmaDetectionRes
     ...match,
     detectedAt: new Date().toLocaleTimeString(),
   };
+}
+
+/**
+ * Mock API service retrieving AI recommendations based on active cart items.
+ */
+export async function mockGetRecommendations(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _cartItems: CartItemType[]
+): Promise<Recommendation[]> {
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  return mockRecommendationsCatalog;
 }

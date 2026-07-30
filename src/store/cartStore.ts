@@ -5,9 +5,9 @@ import {
   GemmaDetectionResult,
   LoadCellTelemetryData,
   Product,
-  RecommendationItem,
+  Recommendation,
 } from "@/types";
-import { identifyProduct } from "@/lib/api";
+import { identifyProduct, getRecommendations } from "@/lib/api";
 
 const ALLOWED_MIME_TYPES = [
   "image/jpeg",
@@ -40,8 +40,8 @@ export interface CartStoreState {
   // Hardware Load Cell Telemetry
   loadCell: LoadCellTelemetryData;
 
-  // Recommendations
-  recommendations: RecommendationItem[];
+  // AI Recommendations State
+  recommendations: Recommendation[];
   isRecommendationsLoading: boolean;
 
   // Actions
@@ -56,6 +56,7 @@ export interface CartStoreState {
   decreaseQuantity: (productId: string) => void;
   clearCart: () => void;
 
+  fetchRecommendations: () => Promise<void>;
   addRecommendationToCart: (recId: string) => void;
   updateLoadCellWeight: (weightGrams: number, isStable?: boolean) => void;
 }
@@ -87,23 +88,38 @@ const initialMockCartItems: CartItemType[] = [
   },
 ];
 
-const initialRecommendations: RecommendationItem[] = [
+const initialMockRecommendations: Recommendation[] = [
   {
-    id: "rec-01",
+    id: "rec-001",
+    title: "You may also like",
     product: {
-      id: "SKU-000201",
+      id: "SKU-000301",
+      name: "Tomato Ketchup 500g",
+      brand: "Heinz",
+      category: "Condiments",
+      price: 99.0,
+      weightGrams: 500,
+    },
+    reason: "Pairs well with items in your cart",
+  },
+  {
+    id: "rec-002",
+    title: "Frequently Bought Together",
+    product: {
+      id: "SKU-000302",
       name: "Unsalted Creamery Butter 200g",
       brand: "Amul",
       category: "Dairy",
       price: 58.0,
       weightGrams: 200,
     },
-    reason: "Frequently bought together with Sourdough Bread",
+    reason: "Frequently bought with Sourdough Bread",
   },
   {
-    id: "rec-02",
+    id: "rec-003",
+    title: "Trending in Pantry",
     product: {
-      id: "SKU-000202",
+      id: "SKU-000303",
       name: "Classic Roasted Oats 500g",
       brand: "Quaker",
       category: "Breakfast Cereal",
@@ -111,18 +127,6 @@ const initialRecommendations: RecommendationItem[] = [
       weightGrams: 500,
     },
     reason: "Popular healthy breakfast choice",
-  },
-  {
-    id: "rec-03",
-    product: {
-      id: "SKU-000203",
-      name: "Organic Honey 250g",
-      brand: "Dabur",
-      category: "Pantry",
-      price: 140.0,
-      weightGrams: 250,
-    },
-    reason: "Pairs naturally with Oats & Milk",
   },
 ];
 
@@ -161,7 +165,6 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
   tax: initialTotals.tax,
   total: initialTotals.total,
 
-  // Initial State Machine
   detectionStatus: "success",
   selectedFile: null,
   uploadedImage: null,
@@ -190,10 +193,9 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
     lastUpdated: "Just now",
   },
 
-  recommendations: initialRecommendations,
+  recommendations: initialMockRecommendations,
   isRecommendationsLoading: false,
 
-  // State machine transition: uploading -> ready
   selectFile: (file: File) => {
     const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
     const isValidType =
@@ -237,7 +239,6 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
     });
   },
 
-  // State machine transition: analyzing -> success / error
   analyzeSelectedFile: async () => {
     const { selectedFile, uploadedImage } = get();
     if (!selectedFile && !uploadedImage) {
@@ -430,11 +431,30 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
     }));
   },
 
+  fetchRecommendations: async () => {
+    const { items } = get();
+    set({ isRecommendationsLoading: true });
+    try {
+      const results = await getRecommendations(items);
+      set({ recommendations: results, isRecommendationsLoading: false });
+    } catch {
+      set({ isRecommendationsLoading: false });
+    }
+  },
+
   addRecommendationToCart: (recId: string) => {
     const { recommendations } = get();
     const target = recommendations.find((r) => r.id === recId);
     if (target) {
-      get().addItem(target.product);
+      const product: Product = {
+        id: target.product.id,
+        name: target.product.name,
+        brand: target.product.brand,
+        category: target.product.category || "General",
+        price: target.product.price,
+        weightGrams: target.product.weightGrams || 250,
+      };
+      get().addItem(product);
     }
   },
 

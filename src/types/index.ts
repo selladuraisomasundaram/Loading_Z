@@ -1,3 +1,5 @@
+export * from "./recommendation";
+
 export type DetectionStatus = "idle" | "uploading" | "analyzing" | "success" | "error";
 
 export interface Product {
@@ -24,7 +26,7 @@ export interface GemmaDetectionResult {
   category: string;
   sub_category: string;
   price: number;
-  confidence: number; // e.g. 0.96 (96%)
+  confidence: number;
   verified: boolean;
   estimatedWeightGrams: number;
   imageUrl?: string;
@@ -37,10 +39,4 @@ export interface LoadCellTelemetryData {
   isStable: boolean;
   statusText: "Stable" | "Measuring..." | "Unstable / Calibrating";
   lastUpdated: string;
-}
-
-export interface RecommendationItem {
-  id: string;
-  product: Product;
-  reason: string;
 }
