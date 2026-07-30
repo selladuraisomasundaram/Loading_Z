@@ -177,19 +177,26 @@ async def identify_product_from_image(image_bytes: bytes) -> Dict[str, Any]:
         # If Gemma failed, try keyword matching on OCR text
         raw_text = ocr_text.lower()
         known_keywords = [
-            ("aashirvaad", "Aashirvaad Whole Wheat Atta"),
-            ("atta", "Aashirvaad Whole Wheat Atta"),
-            ("wheat", "Aashirvaad Whole Wheat Atta"),
-            ("maggi", "Maggi 2-Minute Instant Noodles"),
-            ("noodles", "Nutri-licious Masala Veg Atta Noodles"),
-            ("amul", "Butter - Pasteurised (Amul)"),
-            ("butter", "Butter - Pasteurised (Amul)"),
-            ("garlic", "Garlic Oil - Vegetarian Capsule 500 mg"),
-            ("nivea", "Creme Soft Soap - For Hands & Body"),
+            ("colgate", "Colgate MaxFresh Toothpaste 150g"),
+            ("toothpaste", "Colgate MaxFresh Toothpaste 150g"),
+            ("parle", "Parle-G Glucose Biscuits 250g"),
+            ("biscuit", "Parle-G Glucose Biscuits 250g"),
+            ("aashirvaad", "Aashirvaad Whole Wheat Atta 5kg"),
+            ("atta", "Aashirvaad Whole Wheat Atta 5kg"),
+            ("wheat", "Aashirvaad Whole Wheat Atta 5kg"),
+            ("flour", "Aashirvaad Whole Wheat Atta 5kg"),
+            ("maggi", "Maggi 2-Min Instant Noodles 70g"),
+            ("noodle", "Maggi 2-Min Instant Noodles 70g"),
+            ("amul", "Amul Whole Milk 1L"),
+            ("milk", "Amul Whole Milk 1L"),
+            ("butter", "Amul Unsalted Butter 200g"),
+            ("chocolate", "Dark Chocolate Almond Bar 100g"),
+            ("lindt", "Dark Chocolate Almond Bar 100g"),
+            ("shampoo", "Shampoo & Body Wash"),
+            ("soap", "Creme Soft Soap"),
             ("sanitizer", "Hand Sanitizer - 70% Alcohol Base"),
-            ("bottle", "Water Bottle - Orange"),
+            ("bottle", "Water Bottle"),
             ("tea", "Green Tea - Pure Original"),
-            ("tetley", "Green Tea - Pure Original"),
         ]
 
         for key, name in known_keywords:

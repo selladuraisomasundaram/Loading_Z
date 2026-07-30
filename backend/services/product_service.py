@@ -9,7 +9,7 @@ def get_db_session(db: Optional[Session] = None) -> Session:
 
 def resolve_product(query_name: str, db: Optional[Session] = None) -> Product:
     """
-    Resolves a single product by query name, brand, or SKU using SQLAlchemy query filters.
+    Resolves a single product by query name, brand, or SKU using flexible SQLAlchemy query filters.
     """
     if not query_name or not query_name.strip():
         return _get_fallback_product(query_name or "Unknown")
@@ -21,44 +21,34 @@ def resolve_product(query_name: str, db: Optional[Session] = None) -> Product:
         clean_query = query_name.strip()
         norm_query = f"%{clean_query}%"
 
-        # 0. Check SKU format match
+        # 0. Check SKU format match (e.g. SKU-001, SKU-005, P001, P003)
         sku_clean = clean_query.upper()
-        if not sku_clean.startswith("SKU-"):
+        if not sku_clean.startswith("SKU-") and not sku_clean.startswith("P0"):
             if len(sku_clean) == 6 and all(c in "0123456789ABCDEF" for c in sku_clean):
                 sku_clean = f"SKU-{sku_clean}"
-            elif sku_clean.startswith("SKU") and len(sku_clean) == 9:
-                sku_clean = f"SKU-{sku_clean[3:]}"
 
-        if sku_clean.startswith("SKU-"):
-            match = session.query(Product).filter(Product.id == sku_clean).first()
-            if match:
-                return match
+        match = session.query(Product).filter((Product.id == sku_clean) | (Product.id == clean_query)).first()
+        if match:
+            return match
 
-        # 1. Exact match on product_name (case-insensitive)
-        exact = session.query(Product).filter(Product.product_name.ilike(clean_query)).first()
-        if exact:
-            return exact
-
-        # 2. Substring match on product_name
+        # 1. Substring match on product_name or brand
         sub = session.query(Product).filter(
-            Product.product_name.ilike(norm_query)
+            (Product.product_name.ilike(norm_query)) | (Product.brand.ilike(norm_query))
         ).first()
         if sub:
             return sub
 
-        # 3. Token word matching on product name
-        words = [w for w in clean_query.split() if len(w) > 2]
-        if words:
-            query_builder = session.query(Product)
-            for w in words:
-                pattern = f"%{w}%"
-                query_builder = query_builder.filter(
-                    Product.product_name.ilike(pattern)
-                )
-            word_match = query_builder.first()
-            if word_match:
-                return word_match
-
+        # 2. Individual keyword matching (e.g., Colgate, Toothpaste, Maggi, Parle, Amul, Atta, Milk, Butter)
+        words = [w for w in clean_query.split() if len(w) >= 3]
+        for w in words:
+            word_pattern = f"%{w}%"
+            match = session.query(Product).filter(
+                (Product.product_name.ilike(word_pattern)) | 
+                (Product.brand.ilike(word_pattern)) |
+                (Product.category.ilike(word_pattern))
+            ).first()
+            if match:
+                return match
 
         return _get_fallback_product(query_name)
     except Exception as e:
