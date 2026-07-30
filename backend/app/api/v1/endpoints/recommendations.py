@@ -1,49 +1,56 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
-from typing import List
-from app.gemma.engine import get_ollama_client, GEMMA_MODEL
+from typing import List, Optional
 import sys
 import os
+import asyncio
 
 # Ensure recommendations package is discoverable
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..')))
-from recommendations.engine import get_recipe_recommendations
+from recommendations.engine import generate_hybrid_recommendations
+from app.gemma.reasoning import synthesize_recommendation_pitch
 
 router = APIRouter()
-client = get_ollama_client()
 
-class CartPayload(BaseModel):
+class GeneratePayload(BaseModel):
     cart_items: List[str]
+    scanned_item: Optional[str] = None
 
-@router.post("/recommend")
-async def recommend_products(payload: CartPayload):
-    candidates = get_recipe_recommendations(payload.cart_items)
+@router.post("/generate")
+async def generate_recommendations(payload: GeneratePayload):
+    # Get exact candidate SKUs
+    candidates = generate_hybrid_recommendations(payload.cart_items, payload.scanned_item)
     
     if not candidates:
         return []
         
-    top_candidate = candidates[0]
-    candidate_name = top_candidate.get("product_name", "Unknown Product")
-    cart_str = ", ".join(payload.cart_items)
+    results = []
+    # Create pitch generation tasks for all candidates concurrently
+    tasks = []
     
-    prompt = (
-        f"The user has {cart_str} in their cart. Our algorithm recommends adding {candidate_name}. "
-        "Write a short, conversational, 1-sentence shopping pitch explaining how this completes their meal. "
-        "Do not mention prices."
-    )
-    
-    try:
-        resp = await client.chat(model=GEMMA_MODEL, messages=[{"role": "user", "content": prompt}])
-        pitch = resp.get("message", {}).get("content", "").strip()
-    except Exception as e:
-        print(f"Error calling Gemma for reasoning: {e}")
-        pitch = f"Adding {candidate_name} perfectly completes your recipe based on what's in your cart!"
+    for candidate in candidates:
+        product_name = candidate.get("product_name", "Unknown Product")
+        rule_source = candidate.get("rule_source", "UNKNOWN")
+        # Ensure we pass strings properly
+        cart_strings = [str(item) for item in payload.cart_items]
+        tasks.append(synthesize_recommendation_pitch(cart_strings, product_name, rule_source))
         
-    return [
-        {
-            "sku": top_candidate.get("sku"),
-            "product_name": candidate_name,
-            "price": top_candidate.get("price", 0.0),
-            "reason": pitch
-        }
-    ]
+    # Wait for all pitches
+    pitches = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    for i, candidate in enumerate(candidates):
+        pitch = pitches[i]
+        if isinstance(pitch, Exception):
+            pitch = f"A great addition to your cart! ({candidate.get('rule_source')})"
+            
+        results.append({
+            "product_id": candidate.get("sku"),
+            "product_name": candidate.get("product_name"),
+            "brand": candidate.get("brand"),
+            "price": candidate.get("price", 0.0),
+            "reason": pitch,
+            "category": candidate.get("category"),
+            "image_url": None
+        })
+        
+    return {"success": True, "recommendations": results}

@@ -111,17 +111,23 @@ export async function identifyProduct(
 }
 
 export async function getRecommendations(
-  cartItems: CartItemPayload[]
+  cartItems: string[]
 ): Promise<RecommendationResponse> {
   if (isMockMode()) {
-    return await mockGetRecommendations(cartItems);
+    // We just pass it through, mockGetRecommendations can handle it or ignore it
+    return await mockGetRecommendations(cartItems as any);
   }
 
   try {
-    const response = await fetchWithTimeout(`${BASE_URL}/api/recommendations`, {
+    const payload = {
+      cart_items: cartItems,
+      scanned_item: cartItems.length > 0 ? cartItems[cartItems.length - 1] : undefined
+    };
+
+    const response = await fetchWithTimeout(`${BASE_URL}/api/v1/recommendations/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cart_items: cartItems }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
@@ -132,7 +138,7 @@ export async function getRecommendations(
     return data;
   } catch (err: unknown) {
     console.warn("Real recommendation API failed, using mock data:", err);
-    return await mockGetRecommendations(cartItems);
+    return await mockGetRecommendations(cartItems as any);
   }
 }
 

@@ -464,10 +464,7 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
     const { items } = get();
     set({ isRecommendationsLoading: true });
     try {
-      const payload = items.map((i) => ({
-        product_id: i.product.id,
-        quantity: i.quantity,
-      }));
+      const payload = items.map((i) => i.product.name);
       const response = await getRecommendations(payload);
 
       if (response.success && response.recommendations) {
