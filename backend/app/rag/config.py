@@ -16,3 +16,10 @@ EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
 FAISS_INDEX_NAME = "products_index"
 BATCH_SIZE = int(os.getenv("RAG_BATCH_SIZE", "500"))
 DEFAULT_TOP_K = int(os.getenv("RAG_DEFAULT_TOP_K", "5"))
+
+# Index metadata file (used for staleness detection)
+INDEX_METADATA_FILE = os.path.join(FAISS_INDEX_DIR, "index_metadata.json")
+
+# Critical fields that MUST be refreshed from live DB before returning results
+# These fields can become stale in FAISS if products are updated in the DB.
+LIVE_VALIDATE_FIELDS = {"price", "stock", "aisle", "shelf", "location", "sale_price", "market_price"}

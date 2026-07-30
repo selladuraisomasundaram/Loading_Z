@@ -62,6 +62,7 @@ def fetch_all_products(db: Optional[Session] = None, batch_size: Optional[int] =
 def fetch_product_by_id(product_id: str, db: Optional[Session] = None) -> Optional[Product]:
     """
     Fetches a single product record by primary key SKU/id.
+    Used for live DB validation of critical fields (price, stock, location).
     """
     if not product_id:
         return None
@@ -81,6 +82,60 @@ def fetch_product_by_id(product_id: str, db: Optional[Session] = None) -> Option
     except Exception as e:
         logger.error(f"Error fetching product {product_id} from database: {e}")
         return None
+
+    finally:
+        if should_close and session:
+            session.close()
+
+
+def fetch_product_count(db: Optional[Session] = None) -> int:
+    """
+    Returns the total number of product records in the live database.
+    Used for staleness detection — if count changed, the FAISS index is stale.
+    """
+    session = None
+    should_close = False
+    try:
+        if db is None:
+            session = SessionLocal()
+            should_close = True
+        else:
+            session = db
+        count = session.query(Product).count()
+        return count
+    except Exception as e:
+        logger.error(f"Error fetching product count: {e}")
+        return 0
+    finally:
+        if should_close and session:
+            session.close()
+
+
+def fetch_products_by_ids(product_ids: List[str], db: Optional[Session] = None) -> dict:
+    """
+    Batch-fetches multiple products by their SKU/id.
+    Returns a dict keyed by product_id for O(1) lookup.
+    Used for live DB validation after FAISS similarity search returns multiple results.
+    """
+    if not product_ids:
+        return {}
+
+    session = None
+    should_close = False
+
+    try:
+        if db is None:
+            session = SessionLocal()
+            should_close = True
+        else:
+            session = db
+
+        products = session.query(Product).filter(Product.id.in_(product_ids)).all()
+        return {p.id: p for p in products}
+
+    except Exception as e:
+        logger.error(f"Error batch-fetching products {product_ids}: {e}")
+        return {}
 
     finally:
         if should_close and session:
