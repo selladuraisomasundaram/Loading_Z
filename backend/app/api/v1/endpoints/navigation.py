@@ -24,11 +24,14 @@ class StopDetail(BaseModel):
     y: float
     is_web_item: bool
 
+from app.gemma.spatial_reasoning import generate_route_explanation
+
 class TSPResponse(BaseModel):
     route_waypoints: List[List[float]]
     stops: List[StopDetail]
     total_distance_meters: float
     estimated_time_minutes: float
+    gemma_route_insight: str
 
 @router.post("/navigation/route", response_model=TSPResponse)
 def get_tsp_navigation_route(payload: TSPPayload):
@@ -38,6 +41,10 @@ def get_tsp_navigation_route(payload: TSPPayload):
     current_pos = tuple(payload.user_location) if payload.user_location and len(payload.user_location) == 2 else (625.0, 125.0)
     
     result = calculate_tsp_cart_route(payload.cart_items, current_pos)
+    
+    # Generate the Gemma AI insight based on the route
+    insight = generate_route_explanation(result["stops"], result["total_distance_meters"])
+    result["gemma_route_insight"] = insight
     
     return TSPResponse(**result)
 
