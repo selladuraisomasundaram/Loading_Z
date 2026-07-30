@@ -188,61 +188,101 @@ export async function mockCheckout(
 export async function mockSendChatMessage(
   message: string
 ): Promise<ChatMessage> {
-  await new Promise((resolve) => setTimeout(resolve, 900));
+  await new Promise((resolve) => setTimeout(resolve, 600));
 
   const lower = message.toLowerCase();
 
-  if (lower.includes("butter") || lower.includes("amul")) {
+  // Intent 1: "Where is Parle-G?"
+  if (lower.includes("parle") || lower.includes("parle-g")) {
     return {
       id: `msg-${Date.now()}`,
       sender: "assistant",
-      text: "Amul Butter (200g, ₹58) is located in AISLE C1 (Dairy & Eggs), Shelf S2. Click 'SHOW ON MAP' to calculate the A* navigation path.",
+      text: "Gemma understood intent 'FIND_PRODUCT' for 'Parle-G'. Database lookup: Parle-G Glucose Biscuits 250g (₹20) is located in AISLE A3 (Biscuits & Snacks), Shelf S01 (x: 510, y: 95). A* pathfinding route generated.",
+      timestamp: new Date().toLocaleTimeString(),
+      targetAisle: "A3",
+      targetProductId: "P001",
+      toolActivity: [
+        { step: "🧠 Gemma Intent Parsing", action: "Parsed intent: FIND_PRODUCT ('Parle-G')" },
+        { step: "🔎 DB Source of Truth", action: "P001 -> Aisle A3, Shelf S01 (x:510, y:95)" },
+        { step: "📍 Positioning Layer", action: "Retrieved current person position (120, 525)" },
+        { step: "🧭 A* Navigation Engine", action: "Calculated shortest walkable route avoiding shelves" },
+        { step: "🗺 Interactive Map UI", action: "Rendered 👤 You are here ────→ 📍 Parle-G (A3)" },
+      ],
+    };
+  }
+
+  // Intent 2: "Take me to shampoo" / Personal Care
+  if (lower.includes("shampoo") || lower.includes("soap") || lower.includes("personal care")) {
+    return {
+      id: `msg-${Date.now()}`,
+      sender: "assistant",
+      text: "Gemma understood intent 'FIND_PRODUCT' for 'Shampoo & Personal Care'. Database lookup: Located in AISLE B3 (Personal Care & Hygiene), Shelf S02. Click 'SHOW ON MAP' to view the A* shortest walkable path.",
+      timestamp: new Date().toLocaleTimeString(),
+      targetAisle: "B3",
+      targetProductId: "P007",
+      toolActivity: [
+        { step: "🧠 Gemma Intent Parsing", action: "Parsed intent: FIND_PRODUCT ('Shampoo')" },
+        { step: "🔎 DB Source of Truth", action: "Aisle B3 - Personal Care, Shelf S02" },
+        { step: "📍 Positioning Layer", action: "Retrieved current person position" },
+        { step: "🧭 A* Navigation Engine", action: "Calculated walkable route to Aisle B3" },
+        { step: "🗺 Interactive Map UI", action: "Highlighted Aisle B3 on floor plan" },
+      ],
+    };
+  }
+
+  // Intent 3: "Where is milk?" / Dairy
+  if (lower.includes("milk") || lower.includes("amul") || lower.includes("butter")) {
+    return {
+      id: `msg-${Date.now()}`,
+      sender: "assistant",
+      text: "Gemma understood intent 'FIND_PRODUCT' for 'Amul Milk'. Database lookup: Amul Whole Milk 1L (₹68) is located in AISLE C1 (Dairy & Fresh Milk), Shelf S01. A* walkable route calculated.",
       timestamp: new Date().toLocaleTimeString(),
       targetAisle: "C1",
+      targetProductId: "P003",
       toolActivity: [
-        { step: "🧠 Intent Analysis", action: "Parsed entity: 'Amul Butter'" },
-        { step: "🔎 Querying Product Catalog DB", action: "P004 found in C1/S2" },
-        { step: "📍 Resolving Aisle location", action: "Mapped Aisle C1" },
-        { step: "🗺 Pathfinder Engine", action: "Triggered A* route calculation" },
-        { step: "✓ Response synthesized", action: "Generated interactive map trigger" },
+        { step: "🧠 Gemma Intent Parsing", action: "Parsed intent: FIND_PRODUCT ('Amul Milk')" },
+        { step: "🔎 DB Source of Truth", action: "P003 -> Aisle C1, Shelf S01 (x:130, y:395)" },
+        { step: "📍 Positioning Layer", action: "Retrieved current person position" },
+        { step: "🧭 A* Navigation Engine", action: "Calculated shortest walkable path" },
+        { step: "🗺 Interactive Map UI", action: "Rendered 👤 You are here ────→ 📍 Amul Milk (C1)" },
       ],
     };
   }
 
-  if (lower.includes("snack") || lower.includes("under") || lower.includes("50")) {
+  // Intent 4: "Show me biscuits"
+  if (lower.includes("biscuit") || lower.includes("cookie") || lower.includes("snack")) {
     return {
       id: `msg-${Date.now()}`,
       sender: "assistant",
-      text: "I found Maggi 2-Min Noodles (₹14, AISLE B2) matching snacks under ₹50 in catalog.",
+      text: "Gemma understood intent 'NAVIGATE_CATEGORY' for 'Biscuits & Snacks'. Database lookup: Found Parle-G Glucose Biscuits (₹20) and Lindt Dark Chocolate (₹150) in AISLE A3.",
       timestamp: new Date().toLocaleTimeString(),
-      targetAisle: "B2",
+      targetAisle: "A3",
+      targetProductId: "P001",
       toolActivity: [
-        { step: "🧠 Intent Analysis", action: "Parsed query: 'Snacks < ₹50'" },
-        { step: "🔎 Querying Product Catalog DB", action: "Filtered products under ₹50" },
-        { step: "📍 Resolving Aisle location", action: "Mapped Aisle B2" },
-        { step: "✓ Response synthesized", action: "Formatted product listing" },
+        { step: "🧠 Gemma Intent Parsing", action: "Parsed intent: NAVIGATE_CATEGORY ('Biscuits & Snacks')" },
+        { step: "🔎 DB Source of Truth", action: "Queried active inventory in Aisle A3" },
+        { step: "📍 Positioning Layer", action: "Retrieved current person position" },
+        { step: "🧭 A* Navigation Engine", action: "Calculated walkable path to Biscuits section" },
+        { step: "🗺 Interactive Map UI", action: "Rendered 👤 You are here ────→ 📍 Biscuits (A3)" },
       ],
     };
   }
 
-  if (lower.includes("maggi") || lower.includes("pair")) {
+  // Intent 5: "How do I reach the dairy section?"
+  if (lower.includes("dairy") || lower.includes("reach")) {
     return {
       id: `msg-${Date.now()}`,
       sender: "assistant",
-      text: "Based on recipe index and web search, Maggi Noodles pair exceptionally well with Heinz Tomato Ketchup (AISLE C3), Melted Butter (AISLE C1), and Oregano Seasoning.",
+      text: "Gemma understood intent 'SECTION_INQUIRY' for 'Dairy Section'. Database lookup: Dairy department encompasses AISLE C1 (Milk, Butter, Cheese). Route updated on map.",
       timestamp: new Date().toLocaleTimeString(),
-      targetAisle: "C3",
-      webSearchUsed: true,
-      webSearchResults: {
-        query: "What pairs best with Maggi Instant Noodles?",
-        sources: ["recipehub.org", "openfoodfacts.org", "nestle.in"],
-        summary: "Top pairings include Tomato Ketchup, Processed Cheese Slices, Sweet Corn, and Oregano Spice Mix.",
-      },
+      targetAisle: "C1",
+      targetProductId: "P003",
       toolActivity: [
-        { step: "🧠 Intent Analysis", action: "Parsed pair query for 'Maggi'" },
-        { step: "🌐 Executing Web Search", action: "Queried external recipe index" },
-        { step: "🔎 Querying Product Catalog DB", action: "Cross-referenced catalog SKUs" },
-        { step: "✓ Response synthesized", action: "Synthesized web research summary" },
+        { step: "🧠 Gemma Intent Parsing", action: "Parsed intent: SECTION_INQUIRY ('Dairy')" },
+        { step: "🔎 DB Source of Truth", action: "Mapped ZONE_DAIRY -> Aisle C1" },
+        { step: "📍 Positioning Layer", action: "Retrieved current person position" },
+        { step: "🧭 A* Navigation Engine", action: "Calculated A* route to Dairy section" },
+        { step: "🗺 Interactive Map UI", action: "Rendered 👤 You are here ────→ 📍 Dairy Section" },
       ],
     };
   }
@@ -250,12 +290,12 @@ export async function mockSendChatMessage(
   return {
     id: `msg-${Date.now()}`,
     sender: "assistant",
-    text: `I processed your request "${message}". I can help locate products, calculate A* shortest paths, or verify catalog prices.`,
+    text: `Gemma processed input "${message}". Database lookup & A* pathfinder ready for product inquiry.`,
     timestamp: new Date().toLocaleTimeString(),
     toolActivity: [
-      { step: "🧠 Intent Analysis", action: "General intent analysis" },
-      { step: "🔎 Querying Product Catalog DB", action: "Checked active inventory" },
-      { step: "✓ Response synthesized", action: "Generated assistant guidance" },
+      { step: "🧠 Gemma Intent Parsing", action: "Parsed general natural language intent" },
+      { step: "🔎 DB Source of Truth", action: "Verified active product catalog" },
+      { step: "🧭 A* Navigation Engine", action: "Ready for route traversal" },
     ],
   };
 }
