@@ -4,27 +4,26 @@ import {
   SensorDataResponse,
   CheckoutResponse,
   CartItemPayload,
-} from "@/types/api";
+  ChatMessage,
+} from "@/types";
 import {
   mockIdentifyProduct,
   mockGetRecommendations,
   mockGetSensorData,
   mockCheckout,
+  mockSendChatMessage,
 } from "./mock-api";
 
-// Environment Configuration
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const isMockMode = (): boolean => {
-  // If explicitly configured, or in browser dev without backend running
   const mockSetting = process.env.NEXT_PUBLIC_USE_MOCK_API;
   if (mockSetting !== undefined) {
     return mockSetting === "true";
   }
-  return true; // Default fallback to safe mock mode
+  return true;
 };
 
-// Reusable HTTP Client Helper with Error Handling
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
@@ -49,11 +48,6 @@ async function fetchWithTimeout(
   }
 }
 
-/**
- * 1. Product Identification API
- * Endpoint: POST /api/products/identify
- * Request: multipart/form-data with 'image' file
- */
 export async function identifyProduct(
   file: File
 ): Promise<ProductIdentificationResponse> {
@@ -89,7 +83,6 @@ export async function identifyProduct(
 
     return data;
   } catch (err: unknown) {
-    // If backend fails or unavailable, fall back safely or throw user-friendly error message
     console.warn("Real API call failed, falling back to mock mode:", err);
     if (process.env.NODE_ENV === "development") {
       return await mockIdentifyProduct(file);
@@ -100,11 +93,6 @@ export async function identifyProduct(
   }
 }
 
-/**
- * 2. Recommendation API
- * Endpoint: POST /api/recommendations
- * Request: { cart_items: [{ product_id, quantity }] }
- */
 export async function getRecommendations(
   cartItems: CartItemPayload[]
 ): Promise<RecommendationResponse> {
@@ -140,10 +128,6 @@ export async function getRecommendations(
   }
 }
 
-/**
- * 3. Sensor / Load Cell API
- * Endpoint: GET /api/sensors/load-cell
- */
 export async function getSensorData(): Promise<SensorDataResponse> {
   if (isMockMode()) {
     return await mockGetSensorData();
@@ -152,7 +136,7 @@ export async function getSensorData(): Promise<SensorDataResponse> {
   try {
     const response = await fetchWithTimeout(`${BASE_URL}/api/sensors/load-cell`, {
       method: "GET",
-      headers: { "Accept": "application/json" },
+      headers: { Accept: "application/json" },
     });
 
     if (!response.ok) {
@@ -176,11 +160,6 @@ export async function getSensorData(): Promise<SensorDataResponse> {
   }
 }
 
-/**
- * 4. Checkout API
- * Endpoint: POST /api/cart/checkout
- * Request: { items: [{ product_id, quantity }] }
- */
 export async function checkout(
   items: CartItemPayload[]
 ): Promise<CheckoutResponse> {
@@ -213,5 +192,38 @@ export async function checkout(
     const message =
       err instanceof Error ? err.message : "Checkout failed. Please try again.";
     throw new Error(message);
+  }
+}
+
+/**
+ * 5. Gemma AI Chat Assistant API
+ * Endpoint: POST /api/assistant/chat
+ * Request: { message: string }
+ */
+export async function sendChatMessage(message: string): Promise<ChatMessage> {
+  if (isMockMode()) {
+    return await mockSendChatMessage(message);
+  }
+
+  try {
+    const response = await fetchWithTimeout(`${BASE_URL}/api/assistant/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    });
+
+    if (!response.ok) {
+      throw new Error("AI Assistant service unavailable.");
+    }
+
+    return (await response.json()) as ChatMessage;
+  } catch (err: unknown) {
+    console.warn("Real assistant API failed, using mock fallback:", err);
+    if (process.env.NODE_ENV === "development") {
+      return await mockSendChatMessage(message);
+    }
+    const msg =
+      err instanceof Error ? err.message : "AI Assistant service unavailable.";
+    throw new Error(msg);
   }
 }

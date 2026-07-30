@@ -1,4 +1,5 @@
 export * from "./api";
+export * from "./assistant";
 export * from "./recommendation";
 export * from "./sensor";
 

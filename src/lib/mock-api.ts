@@ -4,7 +4,8 @@ import {
   SensorDataResponse,
   CheckoutResponse,
   CartItemPayload,
-} from "@/types/api";
+  ChatMessage,
+} from "@/types";
 
 const mockCatalog: ProductIdentificationResponse["product"][] = [
   {
@@ -139,5 +140,84 @@ export async function mockCheckout(
       tax,
       total,
     },
+  };
+}
+
+export async function mockSendChatMessage(
+  message: string
+): Promise<ChatMessage> {
+  await new Promise((resolve) => setTimeout(resolve, 900));
+
+  const lower = message.toLowerCase();
+
+  // Intent 1: "Where is Amul Butter?"
+  if (lower.includes("butter") || lower.includes("amul")) {
+    return {
+      id: `msg-${Date.now()}`,
+      sender: "assistant",
+      text: "Amul Butter (200g, ₹58) is located in Aisle 3 (Dairy & Eggs), Shelf 2. Would you like to view the navigation path on the Store Map?",
+      timestamp: new Date().toLocaleTimeString(),
+      targetAisle: "Aisle 3",
+      toolActivity: [
+        { step: "🧠 Understanding intent", action: "Parsed entity: 'Amul Butter'" },
+        { step: "🔎 Querying Product Catalog DB", action: "SKU-000302 found" },
+        { step: "📍 Resolving Aisle location", action: "Matched Aisle 3 (Dairy & Eggs)" },
+        { step: "🗺 Calculating path via Navigation Engine", action: "Distance: 12 meters" },
+        { step: "✓ Response synthesized", action: "Generated interactive map trigger" },
+      ],
+    };
+  }
+
+  // Intent 2: "Find snacks under ₹50"
+  if (lower.includes("snack") || lower.includes("under") || lower.includes("50")) {
+    return {
+      id: `msg-${Date.now()}`,
+      sender: "assistant",
+      text: "I found Maggi 2-Min Noodles (₹14, Aisle 4) and Roasted Peanuts (₹35, Aisle 4) matching snacks under ₹50 in catalog.",
+      timestamp: new Date().toLocaleTimeString(),
+      targetAisle: "Aisle 4",
+      toolActivity: [
+        { step: "🧠 Understanding intent", action: "Parsed query: 'Snacks < ₹50'" },
+        { step: "🔎 Querying Product Catalog DB", action: "Filtered 2 products under ₹50" },
+        { step: "📍 Resolving Aisle location", action: "Matched Aisle 4 (Instant Foods)" },
+        { step: "✓ Response synthesized", action: "Formatted product listing" },
+      ],
+    };
+  }
+
+  // Intent 3: "What pairs well with Maggi?" (Triggers Web Research)
+  if (lower.includes("maggi") || lower.includes("pair")) {
+    return {
+      id: `msg-${Date.now()}`,
+      sender: "assistant",
+      text: "Based on recipe index and web search, Maggi Noodles pair exceptionally well with Heinz Tomato Ketchup (Aisle 4), Melted Cheese (Aisle 3), and Crispy Oregano Seasoning.",
+      timestamp: new Date().toLocaleTimeString(),
+      targetAisle: "Aisle 4",
+      webSearchUsed: true,
+      webSearchResults: {
+        query: "What pairs best with Maggi Instant Noodles?",
+        sources: ["recipehub.org", "openfoodfacts.org", "nestle.in"],
+        summary: "Top pairings include Tomato Ketchup, Processed Cheese Slices, Sweet Corn, and Oregano Spice Mix.",
+      },
+      toolActivity: [
+        { step: "🧠 Understanding intent", action: "Parsed pair query for 'Maggi'" },
+        { step: "🌐 Executing Web Search", action: "Queried external recipe index" },
+        { step: "🔎 Querying Product Catalog DB", action: "Cross-referenced catalog SKUs" },
+        { step: "✓ Response synthesized", action: "Synthesized web research summary" },
+      ],
+    };
+  }
+
+  // Fallback General Response
+  return {
+    id: `msg-${Date.now()}`,
+    sender: "assistant",
+    text: `I processed your request "${message}". I can help locate products, verify catalog prices, or find aisle paths across the store.`,
+    timestamp: new Date().toLocaleTimeString(),
+    toolActivity: [
+      { step: "🧠 Understanding intent", action: "General intent analysis" },
+      { step: "🔎 Querying Product Catalog DB", action: "Checked active inventory" },
+      { step: "✓ Response synthesized", action: "Generated assistant guidance" },
+    ],
   };
 }
