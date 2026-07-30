@@ -8,7 +8,6 @@ import {
   RouteData,
 } from "@/types";
 import {
-  mockIdentifyProduct,
   mockGetRecommendations,
   mockGetSensorData,
   mockCheckout,
