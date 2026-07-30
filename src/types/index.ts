@@ -10,6 +10,20 @@ export type ActiveTab = "dashboard" | "assistant" | "map" | "settings";
 
 export type DetectionStatus = "idle" | "uploading" | "analyzing" | "success" | "error";
 
+export interface PersonPosition {
+  x: number;
+  y: number;
+  zoneId: string;
+  aisleId: string;
+  timestamp: string;
+}
+
+export interface MovementHistoryPoint {
+  x: number;
+  y: number;
+  timestamp: string;
+}
+
 export interface ProductLocation {
   aisleId: string;
   shelfId: string;
