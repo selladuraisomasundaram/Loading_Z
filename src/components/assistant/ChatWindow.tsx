@@ -3,8 +3,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Bot,
-  User,
-  Send,
+  Mic,
   Sparkles,
   MapPin,
   Loader2,
@@ -41,9 +40,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
   // Auto-scroll to latest message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isProcessing]);
-
-  // Speech recognition effect
+  }, [messages, isProcessing])  // Speech recognition effect
   useEffect(() => {
     if (!isMicActive) return;
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -54,26 +51,45 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
     }
     const recognizer = new SpeechRecognition();
     recognizer.lang = "en-US";
+    recognizer.continuous = true; // Keeps listening even if there's a pause after permission
     recognizer.interimResults = false;
     recognizer.maxAlternatives = 1;
 
     recognizer.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript.trim();
+      // Get the latest result
+      const lastResultIndex = event.results.length - 1;
+      const transcript = event.results[lastResultIndex][0].transcript.trim();
       if (transcript) {
+        setIsMicActive(false); // Stop listening once we have a query
+        recognizer.stop();
         setInputValue(transcript);
         handleSendMessage(transcript);
       }
     };
     recognizer.onerror = (e: any) => {
-      console.error("Speech recognition error", e);
+      console.error("Speech recognition error", e.error);
+      if (e.error !== 'no-speech') {
+        setIsMicActive(false);
+      }
     };
     recognizer.onend = () => {
-      // Stop mic when recognition ends
-      setIsMicActive(false);
+      if (isMicActive) {
+        // Only turn off if we didn't deliberately stop it
+        setIsMicActive(false);
+      }
     };
-    recognizer.start();
+    
+    try {
+      recognizer.start();
+    } catch (e) {
+      console.error("Mic start error", e);
+      setIsMicActive(false);
+    }
+    
     return () => {
-      recognizer.stop();
+      try {
+        recognizer.stop();
+      } catch (e) {}
     };
   }, [isMicActive]);
 
@@ -127,193 +143,96 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
     setActiveTab("map");
   };
 
+  // Get the last bot message to display as feedback
+  const lastBotMessage = [...messages].reverse().find(m => m.sender === "assistant");
+
   return (
-    <div className="flex flex-col h-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative">
-      {/* Header */}
-      <div className="bg-slate-950 p-4 border-b border-slate-800 flex items-center justify-between z-10 shrink-0 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-purple-500/20 text-purple-400 rounded-xl">
-            <Bot className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-              Gemma AI Voice & Chat Engine
-            </h2>
-            <p className="text-[10px] text-slate-500 font-mono">
-              Autonomous Function Orchestration
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={() => setIsMicActive(!isMicActive)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all shadow-sm ${
-            isMicActive
-              ? "bg-rose-500 text-white animate-pulse shadow-rose-500/20"
-              : isProcessing
-              ? "bg-amber-500 text-white animate-pulse shadow-amber-500/20"
-              : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
-          }`}
-        >
-          {isMicActive ? (
-            <>
-              <span className="text-sm">🔴</span>
-              <span>Listening...</span>
-            </>
-          ) : isProcessing ? (
-            <>
-              <span className="text-sm">◌</span>
-              <span>Thinking...</span>
-            </>
-          ) : (
-            <>
-              <span className="text-sm">🎙</span>
-              <span>Ask Assistant</span>
-            </>
-          )}
-        </button>
+    <div className="flex flex-col h-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative items-center justify-center p-8">
+      
+      {/* Central Voice Status / Feedback Area */}
+      <div className="mb-12 text-center h-24 max-w-md w-full flex items-center justify-center">
+         {isProcessing ? (
+           <p className="text-purple-400 animate-pulse text-lg font-medium flex items-center gap-2 justify-center">
+             <Loader2 className="w-6 h-6 animate-spin" />
+             Finding product and reasoning...
+           </p>
+         ) : isMicActive ? (
+           <div className="space-y-2">
+             <p className="text-rose-400 animate-pulse text-2xl font-bold">Listening...</p>
+             <p className="text-slate-400 text-sm">Speak your request clearly</p>
+           </div>
+         ) : (
+           <div className="space-y-2">
+             <p className="text-slate-300 text-sm font-medium leading-relaxed italic opacity-90 line-clamp-3">
+               "{lastBotMessage ? lastBotMessage.text : "Tap to speak with Gemma"}"
+             </p>
+             {lastBotMessage?.targetAisle && (
+               <button
+                 onClick={() => handleShowOnMap(lastBotMessage.targetAisle!)}
+                 className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow-sm"
+               >
+                 <MapPin className="w-3.5 h-3.5" />
+                 Show Route on Map
+               </button>
+             )}
+           </div>
+         )}
       </div>
 
-      {/* Messages Thread */}
-      <div className="flex-1 bg-slate-950/90 border border-slate-800/80 rounded-xl p-4 overflow-y-auto space-y-4 max-h-[480px]">
-        {messages.map((msg) => {
-          const isBot = msg.sender === "assistant";
-          return (
-            <div
-              key={msg.id}
-              onClick={() => isBot && onSelectMessage?.(msg)}
-              className={`flex items-start gap-3 text-xs cursor-pointer ${
-                isBot ? "justify-start" : "justify-end"
-              }`}
-            >
-              {isBot && (
-                <div className="p-1.5 bg-purple-500/10 border border-purple-500/20 rounded-xl text-purple-400 shrink-0 mt-0.5">
-                  <Bot className="w-4 h-4" />
-                </div>
-              )}
+      {/* Central Mic Button */}
+      <button
+        onClick={() => setIsMicActive(!isMicActive)}
+        className={`w-40 h-40 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl group ${
+          isMicActive
+            ? "bg-rose-500 text-white animate-pulse shadow-[0_0_60px_-10px_rgba(244,63,94,0.6)] scale-110"
+            : isProcessing
+            ? "bg-amber-500 text-white shadow-[0_0_60px_-10px_rgba(245,158,11,0.6)]"
+            : "bg-gradient-to-br from-purple-600 to-indigo-700 hover:from-purple-500 hover:to-indigo-600 text-white hover:scale-105 shadow-[0_0_40px_-10px_rgba(147,51,234,0.4)] hover:shadow-[0_0_60px_-10px_rgba(147,51,234,0.6)]"
+        }`}
+      >
+        <Bot className={`w-16 h-16 ${isProcessing ? "animate-bounce" : isMicActive ? "animate-ping opacity-20 absolute" : "group-hover:scale-110 transition-transform"}`} />
+        <Mic className={`w-16 h-16 absolute ${isProcessing ? "opacity-0" : "opacity-100"}`} />
+      </button>
 
-              <div
-                className={`p-3.5 rounded-2xl max-w-[85%] space-y-2.5 ${
-                  isBot
-                    ? "bg-slate-900 border border-slate-800 text-slate-200 shadow-md prose prose-invert prose-sm"
-                    : "bg-sky-600 text-white font-medium shadow-md"
-                }`}
-              >
-                <p className="leading-relaxed whitespace-pre-line">{msg.text}</p>
-
-                {/* Web Research Indicator Badge */}
-                {isBot && msg.webSearchUsed && (
-                  <div className="inline-flex items-center gap-1 text-[10px] bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded-md font-mono">
-                    <Globe className="w-3 h-3 text-cyan-400" />
-                    Web Grounded Knowledge Used
-                  </div>
-                )}
-
-                {/* Action Button: SHOW ON MAP */}
-                {isBot && msg.targetAisle && (
-                  <div className="pt-1">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleShowOnMap(msg.targetAisle!);
-                      }}
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] rounded-lg transition-all shadow-sm flex items-center gap-1.5"
-                    >
-                      <MapPin className="w-3.5 h-3.5" />
-                      <span>SHOW ON MAP ({msg.targetAisle})</span>
-                    </button>
-                  </div>
-                )}
-
-                <div className="text-[10px] text-slate-400 font-mono text-right">
-                  {msg.timestamp}
-                </div>
-              </div>
-
-              {!isBot && (
-                <div className="p-1.5 bg-sky-500/20 border border-sky-500/30 rounded-xl text-sky-300 shrink-0 mt-0.5">
-                  <User className="w-4 h-4" />
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {/* Processing Typing Indicator */}
-        {isProcessing && (
-          <div className="flex items-center space-x-2 text-xs text-purple-400 bg-purple-500/10 border border-purple-500/20 p-2.5 rounded-xl w-fit animate-pulse">
-            <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
-            <span>🔎 Finding product and reasoning...</span>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Quick Action Suggestion Chips */}
-      <div className="space-y-1.5">
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-          Quick Action Suggestions
+      {/* Text Bubble Suggestions */}
+      <div className="mt-20 w-full max-w-md">
+        <span className="text-xs font-bold text-slate-500 uppercase tracking-widest block text-center mb-6">
+          Suggestions
         </span>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-1 gap-3">
           <button
             type="button"
             onClick={() => handleSendMessage("Where is Amul Butter?")}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1"
+            className="px-5 py-4 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-medium rounded-2xl transition-all hover:-translate-y-1 hover:shadow-lg flex items-center gap-3 justify-center"
           >
-            <Sparkles className="w-3 h-3 text-amber-400" />
-            Where is Amul Butter?
+            <Sparkles className="w-5 h-5 text-amber-400" />
+            "Where is Amul Butter?"
           </button>
-
+          
           <button
             type="button"
             onClick={() => handleSendMessage("Find snacks under ₹50")}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1"
+            className="px-5 py-4 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-medium rounded-2xl transition-all hover:-translate-y-1 hover:shadow-lg flex items-center gap-3 justify-center"
           >
-            <Sparkles className="w-3 h-3 text-sky-400" />
-            Find snacks under ₹50
+            <Sparkles className="w-5 h-5 text-sky-400" />
+            "Find snacks under ₹50"
           </button>
-
+          
           <button
             type="button"
             onClick={() => handleSendMessage("What pairs well with Maggi?")}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1"
+            className="px-5 py-4 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-medium rounded-2xl transition-all hover:-translate-y-1 hover:shadow-lg flex items-center gap-3 justify-center"
           >
-            <Globe className="w-3 h-3 text-cyan-400" />
-            What pairs well with Maggi?
+            <Globe className="w-5 h-5 text-cyan-400" />
+            "What pairs well with Maggi?"
           </button>
         </div>
       </div>
-
-      {/* Input Field */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleSendMessage();
-        }}
-        className="flex items-center gap-2 pt-1"
-      >
-        <input
-          type="text"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          placeholder={
-            isMicActive
-              ? "Listening to voice input..."
-              : "Type your query for Gemma AI..."
-          }
-          disabled={isProcessing}
-          className="flex-1 px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-colors"
-        />
-
-        <button
-          type="submit"
-          disabled={!inputValue.trim() || isProcessing}
-          className="px-5 py-3 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 shrink-0"
-        >
-          <Send className="w-4 h-4" />
-          <span>Send</span>
-        </button>
-      </form>
+      
+      {/* Hidden abstract elements - preserving state array structurally for hook compatibility */}
+      <div className="hidden">
+        {messages.length}
+      </div>
     </div>
   );
 };
