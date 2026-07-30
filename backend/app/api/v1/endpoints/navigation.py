@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Query, Depends
 from typing import List
 from pydantic import BaseModel
-from app.navigation.pathfinder import calculate_route
+from app.navigation.pathfinder import calculate_route, calculate_tsp_cart_route
 from app.core.database import DatabaseEngine
 from app.api.deps import get_db
 
@@ -12,6 +12,34 @@ class NavigationRouteResponse(BaseModel):
     target_location: str
     waypoints: List[str]
     distance_meters: float
+
+class TSPPayload(BaseModel):
+    cart_items: list[dict]
+    user_location: list[float] = None
+
+class StopDetail(BaseModel):
+    product_name: str
+    aisle: str
+    x: float
+    y: float
+    is_web_item: bool
+
+class TSPResponse(BaseModel):
+    route_waypoints: List[List[float]]
+    stops: List[StopDetail]
+    total_distance_meters: float
+    estimated_time_minutes: float
+
+@router.post("/navigation/route", response_model=TSPResponse)
+def get_tsp_navigation_route(payload: TSPPayload):
+    """
+    Calculates the shortest multi-stop route (TSP) for all items in the cart.
+    """
+    current_pos = tuple(payload.user_location) if payload.user_location and len(payload.user_location) == 2 else (625.0, 125.0)
+    
+    result = calculate_tsp_cart_route(payload.cart_items, current_pos)
+    
+    return TSPResponse(**result)
 
 @router.get("/navigation/route", response_model=NavigationRouteResponse)
 def get_navigation_route(
