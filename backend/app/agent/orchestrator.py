@@ -1,6 +1,7 @@
 import json
 import re
 import os
+import asyncio
 import hashlib
 from typing import Dict, Any, List, Optional
 from app.gemma.engine import get_ollama_client, GEMMA_MODEL
@@ -98,7 +99,7 @@ async def orchestrate_message(message: str) -> Dict[str, Any]:
     argument = ""
     
     try:
-        import asyncio
+        gemma_timeout = float(os.getenv("GEMMA_TIMEOUT_SECONDS", "60.0"))
         response = await asyncio.wait_for(
             client.chat(
                 model=model_name,
@@ -108,7 +109,7 @@ async def orchestrate_message(message: str) -> Dict[str, Any]:
                 }],
                 format="json"
             ),
-            timeout=3.0
+            timeout=gemma_timeout
         )
 
         content = response.get("message", {}).get("content", "")

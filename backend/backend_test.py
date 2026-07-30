@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 import json
@@ -5,6 +6,8 @@ import socket
 import urllib.request
 import urllib.parse
 import urllib.error
+
+os.environ["GEMMA_TIMEOUT_SECONDS"] = "5.0"
 
 if hasattr(sys.stdout, 'reconfigure'):
     try:

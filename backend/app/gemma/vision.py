@@ -1,5 +1,6 @@
 import json
 import os
+import asyncio
 from typing import Dict, Any
 from app.gemma.engine import get_ollama_client, GEMMA_MODEL
 
@@ -23,7 +24,7 @@ async def identify_product_from_image(image_bytes: bytes) -> Dict[str, Any]:
     model_name = os.getenv("GEMMA_MODEL", GEMMA_MODEL)
 
     try:
-        import asyncio
+        gemma_timeout = float(os.getenv("GEMMA_TIMEOUT_SECONDS", "60.0"))
         response = await asyncio.wait_for(
             client.chat(
                 model=model_name,
@@ -34,7 +35,7 @@ async def identify_product_from_image(image_bytes: bytes) -> Dict[str, Any]:
                 }],
                 format="json"
             ),
-            timeout=3.0
+            timeout=gemma_timeout
         )
 
 
