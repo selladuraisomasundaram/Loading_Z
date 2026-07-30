@@ -40,7 +40,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
   // Auto-scroll to latest message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isProcessing])  // Speech recognition effect
+  }, [messages, isProcessing]);
+
+  // Speech recognition effect
   useEffect(() => {
     if (!isMicActive) return;
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -49,33 +51,43 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
       setIsMicActive(false);
       return;
     }
+    
+    let active = true;
     const recognizer = new SpeechRecognition();
     recognizer.lang = "en-US";
-    recognizer.continuous = true; // Keeps listening even if there's a pause after permission
+    recognizer.continuous = true;
     recognizer.interimResults = false;
     recognizer.maxAlternatives = 1;
 
     recognizer.onresult = (event: any) => {
-      // Get the latest result
+      if (!active) return;
       const lastResultIndex = event.results.length - 1;
       const transcript = event.results[lastResultIndex][0].transcript.trim();
       if (transcript) {
-        setIsMicActive(false); // Stop listening once we have a query
-        recognizer.stop();
+        active = false;
+        setIsMicActive(false);
         setInputValue(transcript);
         handleSendMessage(transcript);
       }
     };
+
     recognizer.onerror = (e: any) => {
       console.error("Speech recognition error", e.error);
-      if (e.error !== 'no-speech') {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        active = false;
         setIsMicActive(false);
       }
     };
+
     recognizer.onend = () => {
-      if (isMicActive) {
-        // Only turn off if we didn't deliberately stop it
-        setIsMicActive(false);
+      if (active) {
+        // Restart if it ends prematurely (e.g. Chrome's silence timeout or post-permission restart)
+        try {
+          recognizer.start();
+        } catch (e) {
+          active = false;
+          setIsMicActive(false);
+        }
       }
     };
     
@@ -83,10 +95,12 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
       recognizer.start();
     } catch (e) {
       console.error("Mic start error", e);
+      active = false;
       setIsMicActive(false);
     }
     
     return () => {
+      active = false;
       try {
         recognizer.stop();
       } catch (e) {}
@@ -182,7 +196,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
       {/* Central Mic Button */}
       <button
         onClick={() => setIsMicActive(!isMicActive)}
-        className={`w-40 h-40 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl group ${
+        className={`relative w-40 h-40 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl group ${
           isMicActive
             ? "bg-rose-500 text-white animate-pulse shadow-[0_0_60px_-10px_rgba(244,63,94,0.6)] scale-110"
             : isProcessing
