@@ -15,6 +15,7 @@ import {
   Radio,
   Wifi,
   Activity,
+  Navigation,
 } from "lucide-react";
 import {
   storeMapConfig,
@@ -27,7 +28,7 @@ import {
   AisleData,
   SupermarketZone,
 } from "./storeMapData";
-import { Product, PersonPosition, TrackedPerson } from "@/types";
+import { Product, PersonPosition, TrackedPerson, NavigationRequest } from "@/types";
 import { usePersonPositionStream } from "@/hooks/usePersonPositionStream";
 
 export interface MapPosition {
@@ -90,6 +91,26 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
     selectedProduct?.location?.aisleId ||
     selectedAisleId;
 
+  // Dynamic Navigation Request (Connects Current Person 👤 to Selected Product 📍)
+  const navRequest: NavigationRequest | null = selectedProduct
+    ? {
+        start: {
+          x: activePerson.x,
+          y: activePerson.y,
+          label: `👤 ${activePerson.personId} (${activePerson.aisleId})`,
+        },
+        destination: {
+          x: selectedProduct.mapX || selectedProduct.location?.x || 510,
+          y: selectedProduct.mapY || selectedProduct.location?.y || 95,
+          label: `📍 ${selectedProduct.name || selectedProduct.productName}`,
+        },
+        productId: selectedProduct.id || selectedProduct.productId,
+        productName: selectedProduct.name || selectedProduct.productName,
+        aisleId: selectedProduct.aisleId || selectedProduct.location?.aisleId,
+        shelfId: selectedProduct.shelfId || selectedProduct.location?.shelfId,
+      }
+    : null;
+
   // Zoom Controls
   const handleZoomIn = () => setMapZoom((prev) => Math.min(prev + 0.25, 3.0));
   const handleZoomOut = () => setMapZoom((prev) => Math.max(prev - 0.25, 0.75));
@@ -141,7 +162,6 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
 
   const { viewWidth, viewHeight, boundaries } = storeMapConfig;
 
-  // Helper for Connection Status Badge styling
   const getConnectionBadge = (status: string) => {
     switch (status) {
       case "Tracking":
@@ -167,9 +187,8 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
-                Real-Time Person Movement & Positioning Map
+                Real-Time Person & Product Destination Map
               </h3>
-              {/* Connection Status Badge */}
               <span
                 className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border flex items-center gap-1 ${getConnectionBadge(
                   connectionStatus
@@ -180,7 +199,7 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Live Stream Tracker • Euclidean Noise Filter (≥5px) • Unique <code className="text-sky-700 font-bold">personId</code> Identifier
+              Live Stream Tracker • Dynamic Product Route Vector (<code className="text-sky-700 font-bold">👤 ──→ 📍</code>)
             </p>
           </div>
         </div>
@@ -664,7 +683,60 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
               })}
             </g>
 
-            {/* 9. MULTI-PERSON MOVEMENT TRAIL LAYER */}
+            {/* 9. DYNAMIC ROUTE VECTOR (👤 ─────────→ 📍 DESTINATION) */}
+            {navRequest && (
+              <g id="dynamic-navigation-route">
+                <line
+                  x1={navRequest.start.x}
+                  y1={navRequest.start.y}
+                  x2={navRequest.destination.x}
+                  y2={navRequest.destination.y}
+                  stroke="#38bdf8"
+                  strokeWidth={5}
+                  strokeOpacity={0.35}
+                />
+                <line
+                  x1={navRequest.start.x}
+                  y1={navRequest.start.y}
+                  x2={navRequest.destination.x}
+                  y2={navRequest.destination.y}
+                  stroke="#0284c7"
+                  strokeWidth={2.5}
+                  strokeDasharray="6,6"
+                  className="animate-pulse"
+                />
+                {/* Midpoint Route Badge */}
+                <g
+                  transform={`translate(${
+                    (navRequest.start.x + navRequest.destination.x) / 2
+                  }, ${(navRequest.start.y + navRequest.destination.y) / 2})`}
+                >
+                  <rect
+                    x={-55}
+                    y={-12}
+                    width={110}
+                    height={22}
+                    fill="#0f172a"
+                    stroke="#38bdf8"
+                    strokeWidth={1}
+                    rx={6}
+                  />
+                  <text
+                    x={0}
+                    y={3}
+                    fill="#38bdf8"
+                    fontSize="8.5"
+                    fontWeight="900"
+                    textAnchor="middle"
+                    fontFamily="sans-serif"
+                  >
+                    👤 ─────→ 📍 PRODUCT
+                  </text>
+                </g>
+              </g>
+            )}
+
+            {/* 10. MULTI-PERSON MOVEMENT TRAIL LAYER */}
             {showTrail &&
               Object.values(trackedPersons).map((person: TrackedPerson) => {
                 if (person.history.length < 2) return null;
@@ -693,14 +765,13 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
                 );
               })}
 
-            {/* 10. REAL-TIME MULTI-PERSON POSITIONING MARKERS (👤 personId) */}
+            {/* 11. REAL-TIME MULTI-PERSON POSITIONING MARKERS (👤 personId) */}
             {Object.values(trackedPersons).map((person: TrackedPerson) => (
               <g
                 key={person.personId}
                 id={`person-marker-${person.personId}`}
                 className="transition-all duration-700 ease-in-out cursor-pointer"
               >
-                {/* Pulsating outer sonar ring */}
                 <circle
                   cx={person.x}
                   cy={person.y}
@@ -717,12 +788,10 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
                   stroke="#ffffff"
                   strokeWidth={2}
                 />
-                {/* Human icon inside marker */}
                 <g transform={`translate(${person.x - 5}, ${person.y - 5})`}>
                   <User className="w-2.5 h-2.5 text-white" />
                 </g>
 
-                {/* Dynamic Label Badge */}
                 <rect
                   x={person.x - 65}
                   y={person.y - 32}
@@ -780,8 +849,8 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
         </div>
       </div>
 
-      {/* SELECTED PRODUCT INFORMATION MODAL / CARD */}
-      {selectedProduct && (
+      {/* SELECTED PRODUCT DESTINATION CARD */}
+      {selectedProduct && navRequest && (
         <div className="bg-gradient-to-r from-sky-50 to-indigo-50 border border-sky-200 rounded-2xl p-5 shadow-sm space-y-3 relative">
           <button
             onClick={() => {
@@ -801,7 +870,7 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <h4 className="text-base font-extrabold text-slate-900">
-                    {selectedProduct.name || selectedProduct.productName}
+                    📍 {selectedProduct.name || selectedProduct.productName}
                   </h4>
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
                     {selectedProduct.availability || "In Stock"} ({selectedProduct.stock ?? 30} units)
@@ -814,16 +883,21 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-3 text-xs bg-white border border-sky-200 px-4 py-2.5 rounded-xl shadow-2xs">
-              <div className="text-slate-600">
-                Aisle: <strong className="text-sky-700 font-extrabold">{selectedProduct.aisleId || selectedProduct.location?.aisleId || "A3"}</strong>
+              <div className="flex items-center gap-1 text-slate-700 font-bold">
+                <Navigation className="w-4 h-4 text-sky-600" />
+                <span>DYNAMIC ROUTE (👤 ──→ 📍)</span>
               </div>
               <div className="h-4 w-px bg-slate-200" />
               <div className="text-slate-600">
-                Shelf: <strong className="text-sky-700 font-extrabold">{selectedProduct.shelfId || selectedProduct.location?.shelfId || "S02"}</strong>
+                Aisle: <strong className="text-sky-700 font-extrabold">{navRequest.aisleId || "A3"}</strong>
               </div>
               <div className="h-4 w-px bg-slate-200" />
               <div className="text-slate-600">
-                Map Position: <strong className="text-emerald-700 font-mono font-extrabold">({selectedProduct.mapX || selectedProduct.location?.x || 510}, {selectedProduct.mapY || selectedProduct.location?.y || 95})</strong>
+                Shelf: <strong className="text-sky-700 font-extrabold">{navRequest.shelfId || "S02"}</strong>
+              </div>
+              <div className="h-4 w-px bg-slate-200" />
+              <div className="text-slate-600">
+                Destination: <strong className="text-emerald-700 font-mono font-extrabold">({navRequest.destination.x}, {navRequest.destination.y})</strong>
               </div>
             </div>
           </div>

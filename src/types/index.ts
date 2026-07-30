@@ -21,6 +21,21 @@ export interface PersonPosition {
   timestamp: string;
 }
 
+export interface NavigationPoint {
+  x: number;
+  y: number;
+  label?: string;
+}
+
+export interface NavigationRequest {
+  start: NavigationPoint;
+  destination: NavigationPoint;
+  productId?: string;
+  productName?: string;
+  aisleId?: string;
+  shelfId?: string;
+}
+
 export interface TrackedPerson {
   personId: string;
   name: string;
