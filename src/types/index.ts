@@ -3,6 +3,7 @@ export * from "./assistant";
 export * from "./navigation";
 export * from "./navigationGraph";
 export * from "./recommendation";
+export * from "./routeOptimization";
 export * from "./sensor";
 
 export type ActiveTab = "dashboard" | "assistant" | "map" | "settings";

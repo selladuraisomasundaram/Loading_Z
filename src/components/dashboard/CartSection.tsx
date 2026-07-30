@@ -1,12 +1,12 @@
 "use client";
 
 import React from "react";
-import { ShoppingBag, Trash2 } from "lucide-react";
+import { ShoppingBag, Trash2, Sparkles } from "lucide-react";
 import CartItem from "@/components/ui/CartItem";
 import { useCart } from "@/hooks/useCart";
 
 export const CartSection: React.FC = () => {
-  const { items, itemCount, clearCart } = useCart();
+  const { items, itemCount, clearCart, setActiveTab } = useCart();
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
@@ -48,10 +48,22 @@ export const CartSection: React.FC = () => {
           </p>
         </div>
       ) : (
-        <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
-          {items.map((item) => (
-            <CartItem key={item.product.id} item={item} />
-          ))}
+        <div className="space-y-3">
+          {/* OPTIMIZE ROUTE FOR CART BUTTON */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("map")}
+            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>Optimize Multi-Product Route on Map</span>
+          </button>
+
+          <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
+            {items.map((item) => (
+              <CartItem key={item.product.id} item={item} />
+            ))}
+          </div>
         </div>
       )}
     </div>

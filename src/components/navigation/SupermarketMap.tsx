@@ -19,15 +19,17 @@ import {
   catalogProducts,
   AisleData,
 } from "./storeMapData";
-import { Product, ProductLocation, AStarResult } from "@/types";
+import { Product, ProductLocation, MultiProductRouteResult } from "@/types";
 import { supermarketGraph } from "@/lib/navigation/navigationGraph";
-import { findShortestPathAStar, findNearestWalkableNode } from "@/lib/navigation/aStar";
+import { findShortestPathAStar } from "@/lib/navigation/aStar";
+import { optimizeMultiProductRoute } from "@/lib/navigation/routeOptimizer";
 import { formatCurrency } from "@/lib/utils";
 
 export interface SupermarketMapProps {
   initialSelectedAisleId?: string;
   selectedProduct?: Product | null;
   multiSelectedLocations?: ProductLocation[];
+  cartProducts?: Product[];
   onAisleSelect?: (aisle: AisleData) => void;
   onProductSelect?: (product: Product) => void;
 }
@@ -36,6 +38,7 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
   initialSelectedAisleId = "A3",
   selectedProduct = null,
   multiSelectedLocations = [],
+  cartProducts = [],
   onAisleSelect,
   onProductSelect,
 }) => {
@@ -43,7 +46,6 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
     selectedProduct?.location?.aisleId || initialSelectedAisleId
   );
   const [isNavigating, setIsNavigating] = useState<boolean>(false);
-  const [startNodeId] = useState<string>("N_ENTRANCE");
 
   const activeAisleId = selectedProduct?.location?.aisleId || selectedAisleId;
   const selectedAisle =
@@ -58,31 +60,38 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
     onAisleSelect?.(aisle);
   };
 
-  // PHASE 3: Calculate A* Path from ENTRANCE to Target Product / Aisle Node
-  let targetNodeId = `N_AISLE_${activeAisleId}`;
-  if (selectedProduct && selectedProduct.location) {
-    const nearest = findNearestWalkableNode(
-      supermarketGraph,
-      selectedProduct.location.x,
-      selectedProduct.location.y
-    );
-    targetNodeId = nearest.id;
-  }
+  // PHASE 4: Multi-Product TSP Route Optimizer Calculation
+  const activeProductList: Product[] =
+    cartProducts.length > 0
+      ? cartProducts
+      : selectedProduct
+      ? [selectedProduct]
+      : [];
 
-  const aStarRoute: AStarResult = findShortestPathAStar(
-    supermarketGraph,
-    startNodeId,
-    targetNodeId
+  const multiRoute: MultiProductRouteResult = optimizeMultiProductRoute(
+    activeProductList
   );
 
-  // Generate SVG path string "M x1 y1 L x2 y2 L x3 y3..." from A* waypoints
-  const svgPathD = aStarRoute.waypoints.length > 0
-    ? aStarRoute.waypoints.reduce(
-        (acc, curr, idx) =>
-          idx === 0 ? `M ${curr.x} ${curr.y}` : `${acc} L ${curr.x} ${curr.y}`,
-        ""
-      )
-    : "";
+  // Fallback single-product route if no cart items
+  const singleRoute = findShortestPathAStar(
+    supermarketGraph,
+    "N_ENTRANCE",
+    `N_AISLE_${activeAisleId}`
+  );
+
+  const activeWaypoints =
+    multiRoute.fullSvgWaypoints.length > 0
+      ? multiRoute.fullSvgWaypoints
+      : singleRoute.waypoints;
+
+  const svgPathD =
+    activeWaypoints.length > 0
+      ? activeWaypoints.reduce(
+          (acc, curr, idx) =>
+            idx === 0 ? `M ${curr.x} ${curr.y}` : `${acc} L ${curr.x} ${curr.y}`,
+          ""
+        )
+      : "";
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -94,10 +103,10 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
           </div>
           <div>
             <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">
-              Indoor Supermarket Map & A* Navigation Engine
+              Supermarket Floor Map & Multi-Product Route Engine
             </h2>
             <p className="text-xs text-slate-500">
-              Phase 3: Spatial Graph Pathfinder & SVG Polyline Route Visualization
+              Phase 4: TSP Route Optimization • Numbered Waypoint Order • Checkout Destination
             </p>
           </div>
         </div>
@@ -109,21 +118,21 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
           </span>
           <div className="flex items-center gap-1.5 text-slate-700">
             <span className="w-3 h-3 rounded-full bg-emerald-500 border border-emerald-600" />
-            <span>🟢 Start (Entrance)</span>
+            <span>🟢 Start</span>
           </div>
           <div className="flex items-center gap-1.5 text-sky-700 font-bold">
             <span className="w-4 h-1 bg-sky-400 rounded-full" />
-            <span>━━ A* Route Line</span>
+            <span>━━ TSP Route</span>
           </div>
           <div className="flex items-center gap-1.5 text-amber-800 font-bold">
-            <span className="w-3 h-3 rounded-md bg-amber-400 border border-amber-500" />
-            <span>Selected Aisle</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-purple-700 font-bold">
-            <span className="w-3.5 h-3.5 rounded-full bg-purple-500 text-white flex items-center justify-center text-[10px]">
-              📍
+            <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center font-black text-[9px]">
+              ①
             </span>
-            <span>Shelf Target</span>
+            <span>Stop Order</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-emerald-800 font-bold">
+            <span className="w-3 h-3 rounded-full bg-emerald-500 border border-emerald-600" />
+            <span>🏁 Checkout</span>
           </div>
         </div>
       </div>
@@ -273,10 +282,9 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
             </g>
           ))}
 
-          {/* PHASE 3: RENDER SVG ROUTE POLYLINE (A* CALCULATED PATH) */}
+          {/* PHASE 4: RENDER CONTINUOUS SVG TSP ROUTE POLYLINE */}
           {isNavigating && svgPathD && (
             <g>
-              {/* Outer Glow Line */}
               <path
                 d={svgPathD}
                 fill="none"
@@ -287,7 +295,6 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
                 opacity="0.4"
                 className="animate-pulse"
               />
-              {/* Inner Glowing Animated Dash Line */}
               <path
                 d={svgPathD}
                 fill="none"
@@ -300,8 +307,87 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
             </g>
           )}
 
-          {/* RENDER ACTIVE SELECTED PRODUCT SHELF PIN (📍) */}
-          {selectedProduct && selectedProduct.location && (
+          {/* PHASE 4: RENDER NUMBERED WAYPOINT BADGES (①, ②, ③, ④, ⑤ Checkout) ON SVG MAP */}
+          {isNavigating &&
+            multiRoute.waypoints.map((wp) => (
+              <g key={wp.id} className="transition-all duration-300">
+                {/* Glowing Outer Ring */}
+                <circle
+                  cx={wp.x}
+                  cy={wp.y}
+                  r="14"
+                  fill={
+                    wp.type === "start"
+                      ? "#10b981"
+                      : wp.type === "checkout"
+                      ? "#059669"
+                      : "#f59e0b"
+                  }
+                  fillOpacity="0.4"
+                  className="animate-pulse"
+                />
+                {/* Inner Circle Badge */}
+                <circle
+                  cx={wp.x}
+                  cy={wp.y}
+                  r="11"
+                  fill={
+                    wp.type === "start"
+                      ? "#059669"
+                      : wp.type === "checkout"
+                      ? "#047857"
+                      : "#d97706"
+                  }
+                  stroke="#ffffff"
+                  strokeWidth="2"
+                />
+                {/* Numbered Step Badge Text */}
+                <text
+                  x={wp.x}
+                  y={wp.y + 4}
+                  textAnchor="middle"
+                  fill="#ffffff"
+                  fontSize="11"
+                  fontWeight="900"
+                  fontFamily="monospace"
+                >
+                  {wp.type === "start"
+                    ? "🟢"
+                    : wp.type === "checkout"
+                    ? "🏁"
+                    : wp.stepNumber}
+                </text>
+
+                {/* Waypoint Text Overlay Label */}
+                {wp.productName && wp.type === "product" && (
+                  <g>
+                    <rect
+                      x={wp.x - 35}
+                      y={wp.y - 28}
+                      width="70"
+                      height="16"
+                      rx="4"
+                      fill="#78350f"
+                      stroke="#fcd34d"
+                      strokeWidth="1"
+                    />
+                    <text
+                      x={wp.x}
+                      y={wp.y - 16}
+                      textAnchor="middle"
+                      fill="#fffbeb"
+                      fontSize="8"
+                      fontWeight="bold"
+                    >
+                      {wp.stepNumber}. {wp.productName.split(" ")[0]}
+                    </text>
+                  </g>
+                )}
+              </g>
+            ))}
+
+          {/* RENDER ACTIVE SELECTED PRODUCT SHELF PIN */}
+          {selectedProduct && selectedProduct.location && !isNavigating && (
             <g className="animate-bounce">
               <circle
                 cx={selectedProduct.location.x}
@@ -328,28 +414,6 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
                 fontWeight="bold"
               >
                 📍
-              </text>
-
-              <rect
-                x={selectedProduct.location.x - 30}
-                y={selectedProduct.location.y - 32}
-                width="60"
-                height="18"
-                rx="4"
-                fill="#581c87"
-                stroke="#c084fc"
-                strokeWidth="1"
-              />
-              <text
-                x={selectedProduct.location.x}
-                y={selectedProduct.location.y - 20}
-                textAnchor="middle"
-                fill="#f3e8ff"
-                fontSize="9"
-                fontWeight="900"
-                fontFamily="monospace"
-              >
-                {selectedProduct.location.shelfId}
               </text>
             </g>
           )}
@@ -413,70 +477,110 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
         </svg>
       </div>
 
-      {/* PHASE 3 ROUTE CONTROLS & TELEMETRY PANEL */}
+      {/* PHASE 4 MULTI-PRODUCT ROUTE OPTIMIZATION TELEMETRY & CONTROLS */}
       <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <div className="flex items-center space-x-2.5">
-            <div className="p-2 bg-sky-50 text-sky-600 rounded-xl border border-sky-100">
+            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
               <Compass className="w-5 h-5" />
             </div>
             <div>
               <h3 className="font-extrabold text-slate-900 text-base">
-                A* Pathfinder Route Telemetry
+                Multi-Product TSP Route Optimizer Summary
               </h3>
               <p className="text-xs text-slate-500">
-                {selectedProduct
-                  ? `Target Product: ${selectedProduct.name} (Aisle ${selectedProduct.location?.aisleId} / Shelf ${selectedProduct.location?.shelfId})`
-                  : `Target Aisle: Aisle ${activeAisleId}`}
+                {activeProductList.length > 0
+                  ? `Optimized visiting order for ${activeProductList.length} items to Checkout`
+                  : "Select products or add cart items to calculate optimized route"}
               </p>
             </div>
           </div>
 
-          <span className="bg-sky-100 text-sky-900 font-bold text-xs px-3 py-1 rounded-full border border-sky-300">
-            A* Engine: {aStarRoute.success ? "Path Found" : "No Route"}
+          <span className="bg-emerald-100 text-emerald-900 font-bold text-xs px-3 py-1 rounded-full border border-emerald-300">
+            Saved: {multiRoute.distanceSavedMeters}m ({multiRoute.percentageSaved}%)
           </span>
         </div>
 
-        {/* Route Stats Grid */}
+        {/* Route Distance Comparison Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-              Start Node
+              Original Order Distance
             </span>
-            <span className="font-black text-slate-900 font-mono text-sm block mt-0.5">
-              ENTRANCE (🛒)
+            <span className="font-black text-slate-500 font-mono text-sm block mt-0.5 line-through">
+              {multiRoute.originalDistanceMeters} m
+            </span>
+          </div>
+
+          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+            <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
+              Optimized TSP Distance
+            </span>
+            <span className="font-black text-emerald-600 font-mono text-sm block mt-0.5">
+              {multiRoute.optimizedDistanceMeters} m
             </span>
           </div>
 
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
             <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
-              Destination Target
+              Distance Saved
             </span>
             <span className="font-black text-amber-600 font-mono text-sm block mt-0.5">
-              Aisle {activeAisleId} ({selectedProduct?.location?.shelfId || "S1"})
+              {multiRoute.distanceSavedMeters} m ({multiRoute.percentageSaved}%)
             </span>
           </div>
 
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-              Calculated Map Distance
+              Total Waypoint Stops
             </span>
             <span className="font-black text-slate-900 font-mono text-sm block mt-0.5">
-              {aStarRoute.totalDistanceMeters} meters
-            </span>
-          </div>
-
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-              Est. Walking Time
-            </span>
-            <span className="font-black text-slate-900 font-mono text-sm block mt-0.5">
-              {aStarRoute.estimatedTimeSeconds} seconds
+              {multiRoute.waypoints.length} Stops (1 Start → {activeProductList.length} Items → Checkout)
             </span>
           </div>
         </div>
 
-        {/* Route Action Controls: [ Navigate ] & [ Clear Route ] */}
+        {/* OPTIMIZED VISITING ORDER LIST */}
+        {multiRoute.waypoints.length > 0 && (
+          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
+            <span className="text-[11px] font-extrabold text-slate-800 uppercase tracking-wider block">
+              Optimized Visiting Sequence:
+            </span>
+            <div className="flex flex-wrap items-center gap-2 font-mono">
+              {multiRoute.waypoints.map((wp, idx) => (
+                <div key={wp.id} className="flex items-center gap-1.5">
+                  <span
+                    className={`px-2.5 py-1 rounded-lg border font-bold text-[11px] flex items-center gap-1 ${
+                      wp.type === "start"
+                        ? "bg-emerald-100 border-emerald-300 text-emerald-900"
+                        : wp.type === "checkout"
+                        ? "bg-emerald-600 border-emerald-700 text-white font-black"
+                        : "bg-amber-100 border-amber-300 text-amber-900"
+                    }`}
+                  >
+                    <span>
+                      {wp.type === "start"
+                        ? "🟢 Entrance"
+                        : wp.type === "checkout"
+                        ? "🏁 Checkout"
+                        : `${wp.stepNumber}. ${wp.productName}`}
+                    </span>
+                    {wp.aisleId && (
+                      <span className="text-[9px] opacity-75 font-normal">
+                        ({wp.aisleId}/{wp.shelfId})
+                      </span>
+                    )}
+                  </span>
+                  {idx < multiRoute.waypoints.length - 1 && (
+                    <span className="text-slate-400">→</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Action Controls: [ Optimize & Navigate ] & [ Clear Route ] */}
         <div className="flex items-center gap-3 pt-1">
           <button
             type="button"
@@ -485,7 +589,7 @@ export const SupermarketMap: React.FC<SupermarketMapProps> = ({
             className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800/50 disabled:cursor-not-allowed text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2"
           >
             <Play className="w-4 h-4 fill-white" />
-            <span>Navigate (A* Route)</span>
+            <span>Optimize & Navigate Route (TSP)</span>
           </button>
 
           <button
