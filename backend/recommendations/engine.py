@@ -91,7 +91,7 @@ def generate_hybrid_recommendations(cart_items: List[str], current_scanned_item:
     normalized_cart = set(normalize_text(item) for item in combined_cart)
     
     # Step B: Fetch candidate keywords
-    co_occurrence_keywords = get_co_occurrence_candidates(combined_cart)
+    co_occurrence_keywords = get_co_occurrence_candidates(cart_items, current_scanned_item)
     recipe_keywords = get_recipe_candidate_keywords(combined_cart)
     
     # Step C: Deduplicate candidate keywords and exclude items already in cart
