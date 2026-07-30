@@ -12,16 +12,40 @@ import { findShortestPathAStar, findNearestWalkableNode } from "./navigation/aSt
 
 const mockCatalog: ProductIdentificationResponse["product"][] = [
   {
-    product_id: "SKU-004",
-    product_name: "Aashirvaad Whole Wheat Flour 5kg",
-    brand: "Aashirvaad",
-    category: "Pantry",
-    sub_category: "Flour & Atta",
-    price: 245.0,
+    product_id: "SKU-005",
+    product_name: "Colgate MaxFresh Toothpaste 150g",
+    brand: "Colgate",
+    category: "Personal Care",
+    sub_category: "Oral Care & Hygiene",
+    price: 95.0,
+    image_url: null,
+    confidence: 0.98,
+    verified: true,
+    estimatedWeightGrams: 150,
+  },
+  {
+    product_id: "P001",
+    product_name: "Parle-G Glucose Biscuits 250g",
+    brand: "Parle",
+    category: "Biscuits & Snacks",
+    sub_category: "Glucose Biscuits",
+    price: 20.0,
+    image_url: null,
+    confidence: 0.96,
+    verified: true,
+    estimatedWeightGrams: 250,
+  },
+  {
+    product_id: "P004",
+    product_name: "Amul Unsalted Butter 200g",
+    brand: "Amul",
+    category: "Dairy",
+    sub_category: "Butter & Cheese",
+    price: 58.0,
     image_url: null,
     confidence: 0.97,
     verified: true,
-    estimatedWeightGrams: 5000,
+    estimatedWeightGrams: 200,
   },
   {
     product_id: "SKU-001",
@@ -34,6 +58,30 @@ const mockCatalog: ProductIdentificationResponse["product"][] = [
     confidence: 0.96,
     verified: true,
     estimatedWeightGrams: 70,
+  },
+  {
+    product_id: "P003",
+    product_name: "Amul Whole Milk 1L",
+    brand: "Amul",
+    category: "Dairy",
+    sub_category: "Fresh Milk",
+    price: 68.0,
+    image_url: null,
+    confidence: 0.99,
+    verified: true,
+    estimatedWeightGrams: 1030,
+  },
+  {
+    product_id: "SKU-004",
+    product_name: "Aashirvaad Whole Wheat Flour 5kg",
+    brand: "Aashirvaad",
+    category: "Pantry",
+    sub_category: "Flour & Atta",
+    price: 245.0,
+    image_url: null,
+    confidence: 0.97,
+    verified: true,
+    estimatedWeightGrams: 5000,
   },
   {
     product_id: "SKU-002",
@@ -64,36 +112,68 @@ const mockCatalog: ProductIdentificationResponse["product"][] = [
 export async function mockIdentifyProduct(
   file: File
 ): Promise<ProductIdentificationResponse> {
-  await new Promise((resolve) => setTimeout(resolve, 800));
+  await new Promise((resolve) => setTimeout(resolve, 600));
 
   const nameLower = file.name.toLowerCase();
 
-  // Smart Vision OCR Keyword Matching
-  let matchedProduct = mockCatalog.find(
-    () =>
-      nameLower.includes("aashirvaad") ||
-      nameLower.includes("atta") ||
-      nameLower.includes("flour") ||
-      nameLower.includes("wheat") ||
-      nameLower.includes("aashir")
-  );
-
-  if (!matchedProduct && (nameLower.includes("maggi") || nameLower.includes("noodle"))) {
-    matchedProduct = mockCatalog.find((p) => p.product_id === "SKU-001");
+  // 1. Colgate / Toothpaste / Oral Care
+  if (
+    nameLower.includes("colgate") ||
+    nameLower.includes("toothpaste") ||
+    nameLower.includes("paste") ||
+    nameLower.includes("oral") ||
+    nameLower.includes("teeth")
+  ) {
+    return { success: true, product: mockCatalog.find((p) => p.product_id === "SKU-005")! };
   }
 
-  if (!matchedProduct && (nameLower.includes("milk") || nameLower.includes("almond") || nameLower.includes("silk"))) {
-    matchedProduct = mockCatalog.find((p) => p.product_id === "SKU-002");
+  // 2. Parle-G / Biscuits
+  if (
+    nameLower.includes("parle") ||
+    nameLower.includes("biscuit") ||
+    nameLower.includes("cookie") ||
+    nameLower.includes("glucose")
+  ) {
+    return { success: true, product: mockCatalog.find((p) => p.product_id === "P001")! };
   }
 
-  if (!matchedProduct && (nameLower.includes("chocolate") || nameLower.includes("lindt") || nameLower.includes("dark"))) {
-    matchedProduct = mockCatalog.find((p) => p.product_id === "SKU-003");
+  // 3. Butter / Amul Butter
+  if (nameLower.includes("butter")) {
+    return { success: true, product: mockCatalog.find((p) => p.product_id === "P004")! };
   }
 
-  // Default to Aashirvaad Whole Wheat Flour for generic image uploads / screenshots
-  if (!matchedProduct) {
-    matchedProduct = mockCatalog.find((p) => p.product_id === "SKU-004") || mockCatalog[0]!;
+  // 4. Maggi / Noodles
+  if (nameLower.includes("maggi") || nameLower.includes("noodle") || nameLower.includes("nestle")) {
+    return { success: true, product: mockCatalog.find((p) => p.product_id === "SKU-001")! };
   }
+
+  // 5. Milk / Silk / Amul Milk
+  if (nameLower.includes("silk") || nameLower.includes("almond")) {
+    return { success: true, product: mockCatalog.find((p) => p.product_id === "SKU-002")! };
+  }
+  if (nameLower.includes("milk") || nameLower.includes("amul")) {
+    return { success: true, product: mockCatalog.find((p) => p.product_id === "P003")! };
+  }
+
+  // 6. Chocolate / Lindt
+  if (nameLower.includes("chocolate") || nameLower.includes("lindt") || nameLower.includes("dark")) {
+    return { success: true, product: mockCatalog.find((p) => p.product_id === "SKU-003")! };
+  }
+
+  // 7. Aashirvaad / Flour / Atta
+  if (
+    nameLower.includes("aashirvaad") ||
+    nameLower.includes("atta") ||
+    nameLower.includes("flour") ||
+    nameLower.includes("wheat")
+  ) {
+    return { success: true, product: mockCatalog.find((p) => p.product_id === "SKU-004")! };
+  }
+
+  // Dynamic Hash Matcher for generic files (blob, image.jpg, screenshot.png)
+  // Ensures different uploaded files map to distinct catalog products instead of defaulting to a single hardcoded SKU!
+  const hash = Math.abs(file.size + file.name.length * 13) % mockCatalog.length;
+  const matchedProduct = mockCatalog[hash] || mockCatalog[0]!;
 
   return {
     success: true,
@@ -102,8 +182,7 @@ export async function mockIdentifyProduct(
 }
 
 export async function mockGetRecommendations(
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _cartItems: CartItemPayload[]
+  _cartItems: string[]
 ): Promise<RecommendationResponse> {
   await new Promise((resolve) => setTimeout(resolve, 400));
 
@@ -111,32 +190,32 @@ export async function mockGetRecommendations(
     success: true,
     recommendations: [
       {
-        product_id: "SKU-100",
-        product_name: "Ketchup",
-        price: 99.0,
+        product_id: "P003",
+        product_name: "Amul Processed Cheese Slices 200g",
+        price: 135.0,
+        reason: "Frequently bought together with Amul Milk & Bread",
         image_url: null,
-        reason: "Pairs well with items in your cart",
       },
       {
-        product_id: "SKU-101",
-        product_name: "Unsalted Creamery Butter 200g",
-        price: 58.0,
+        product_id: "SKU-001",
+        product_name: "Heinz Tomato Ketchup 500g",
+        price: 120.0,
+        reason: "Pairs perfectly with Maggi Instant Noodles & Crisps",
         image_url: null,
-        reason: "Frequently bought with Sourdough Bread",
       },
       {
-        product_id: "SKU-102",
-        product_name: "Classic Roasted Oats 500g",
-        price: 185.0,
+        product_id: "P001",
+        product_name: "Parle-G Glucose Biscuits 250g",
+        price: 20.0,
+        reason: "Popular tea-time snack choice",
         image_url: null,
-        reason: "Popular healthy breakfast choice",
       },
     ],
   };
 }
 
 export async function mockGetSensorData(): Promise<SensorDataResponse> {
-  await new Promise((resolve) => setTimeout(resolve, 200));
+  await new Promise((resolve) => setTimeout(resolve, 300));
 
   return {
     success: true,
@@ -159,9 +238,10 @@ export async function mockCheckout(
     "SKU-002": 190.0,
     "SKU-003": 150.0,
     "SKU-004": 245.0,
-    "SKU-100": 99.0,
-    "SKU-101": 58.0,
-    "SKU-102": 185.0,
+    "SKU-005": 95.0,
+    "P001": 20.0,
+    "P003": 68.0,
+    "P004": 58.0,
   };
 
   const subtotal = items.reduce(
