@@ -12,10 +12,13 @@ from app.models.product import VisionAnalysisResponse
 
 router = APIRouter()
 
+from sqlalchemy.orm import Session
+from app.services.product_service import resolve_product
+
 @router.post("/vision/analyze", response_model=VisionAnalysisResponse)
 async def analyze_vision_frame(
     image: UploadFile = File(...),
-    db: DatabaseEngine = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """
     Accepts an uploaded image frame, processes it via Gemma Vision OCR to identify product name,
@@ -32,7 +35,8 @@ async def analyze_vision_frame(
     print(f"Vision identified: '{identified_name}' (confidence: {confidence})", flush=True)
 
     # 3. Resolve item against local SQLite database catalog
-    product = db.resolve_product(identified_name)
+    product = resolve_product(identified_name, db=db)
+
 
     # 4. IF database match is verified (not a mock/fallback) -> return database product details
     is_real_match = (
