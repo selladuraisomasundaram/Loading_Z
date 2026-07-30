@@ -93,8 +93,12 @@ async def analyze_vision_frame(
     except Exception as err:
         print(f"Vision web fallback search notice: {err}")
 
+    # Create a deterministic SKU based on the name so identical unknown items stack
+    safe_name = re.sub(r'[^A-Z0-9]', '', refined_name.upper())
+    fallback_sku = f"WEB-{safe_name[:12]}" if safe_name else "WEB-ITEM"
+
     return VisionAnalysisResponse(
-        sku="WEB-ITEM",
+        sku=fallback_sku,
         product_name=refined_name,
         brand=getattr(product, "brand", None) or "External Item",
         category="Web Fallback",
