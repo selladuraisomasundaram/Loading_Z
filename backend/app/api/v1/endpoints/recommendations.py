@@ -19,7 +19,7 @@ class GeneratePayload(BaseModel):
 @router.post("/generate")
 async def generate_recommendations(payload: GeneratePayload):
     # Get exact candidate SKUs
-    candidates = generate_hybrid_recommendations(payload.cart_items, payload.scanned_item)
+    candidates = await generate_hybrid_recommendations(payload.cart_items, payload.scanned_item)
     
     if not candidates:
         return []

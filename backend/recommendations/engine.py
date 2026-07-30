@@ -78,11 +78,13 @@ def get_recipe_candidate_keywords(cart_items: List[str]) -> List[str]:
             
     return list(missing_ingredients_pool)
 
-def generate_hybrid_recommendations(cart_items: List[str], current_scanned_item: str = None) -> List[Dict[str, Any]]:
+async def generate_hybrid_recommendations(cart_items: List[str], current_scanned_item: str = None) -> List[Dict[str, Any]]:
     """
     Unified hybrid recommendation pipeline.
-    Combines Co-occurrence (Tier 1), Recipe Overlap (Tier 2), and Cold-Start (Tier 3).
+    Combines Gemma AI context (Tier 1), Recipe Overlap (Tier 2), and Cold-Start (Tier 3).
     """
+    from app.gemma.reasoning import predict_related_categories
+
     # Step A: Combine cart_items and current_scanned_item
     combined_cart = list(cart_items)
     if current_scanned_item and current_scanned_item not in combined_cart:
@@ -90,8 +92,13 @@ def generate_hybrid_recommendations(cart_items: List[str], current_scanned_item:
         
     normalized_cart = set(normalize_text(item) for item in combined_cart)
     
-    # Step B: Fetch candidate keywords
-    co_occurrence_keywords = get_co_occurrence_candidates(combined_cart)
+    # Step B: Fetch candidate keywords dynamically from Gemma
+    co_occurrence_keywords = await predict_related_categories(combined_cart)
+    
+    # If Gemma fails or cart is empty, fallback to basic Co-occurrence/Cold Start
+    if not co_occurrence_keywords:
+        co_occurrence_keywords = get_co_occurrence_candidates(combined_cart)
+
     recipe_keywords = get_recipe_candidate_keywords(combined_cart)
     
     # Step C: Deduplicate candidate keywords and exclude items already in cart
@@ -104,13 +111,13 @@ def generate_hybrid_recommendations(cart_items: List[str], current_scanned_item:
                 return True
         return False
         
-    # Process co-occurrence first (higher priority)
+    # Process co-occurrence / dynamic Gemma keywords first (higher priority)
     for kw in co_occurrence_keywords:
         kw_norm = normalize_text(kw)
         if kw_norm not in seen_keywords and not is_in_cart(kw_norm):
             seen_keywords.add(kw_norm)
             # If cart is empty, it's cold start
-            rule = "COLD_START" if not combined_cart else "CO_OCCURRENCE"
+            rule = "COLD_START" if not combined_cart else "DYNAMIC_AI_MATCH"
             candidates_with_rules.append({"keyword": kw, "rule": rule})
             
     # Process recipe matches
