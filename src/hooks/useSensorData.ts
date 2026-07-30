@@ -56,6 +56,15 @@ export function useSensorData(): {
     };
   }, []);
 
+  useEffect(() => {
+    setSensorData((prev) => ({
+      ...prev,
+      weightKg: isNaN(weightKg) ? 0 : weightKg,
+      stable: loadCell.isStable,
+      timestamp: loadCell.statusText,
+    }));
+  }, [weightKg, loadCell.isStable, loadCell.statusText]);
+
   const tareScale = () => {
     updateLoadCellWeight(0, true);
     setSensorData((prev) => ({

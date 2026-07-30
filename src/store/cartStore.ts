@@ -54,6 +54,9 @@ export interface CartStoreState {
   recommendations: Recommendation[];
   isRecommendationsLoading: boolean;
 
+  // Load Cell Animation state
+  animationInterval: NodeJS.Timeout | null;
+
   // Actions
   selectFile: (file: File) => boolean;
   removeImage: () => void;
@@ -128,12 +131,14 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
     currentWeightGrams: 0,
     expectedWeightGrams: 0,
     isStable: true,
-    statusText: "Stable",
-    lastUpdated: "Just now",
+    statusText: "Ready",
+    lastUpdated: new Date().toLocaleTimeString(),
   },
 
   recommendations: [],
   isRecommendationsLoading: false,
+
+  animationInterval: null,
 
   selectFile: (file: File) => {
     const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
@@ -206,16 +211,26 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
       }
 
       const p = response.product;
+      
+      // Generate a consistent pseudo-random weight based on product name
+      const generateWeight = (name: string) => {
+        let hash = 0;
+        for (let i = 0; i < name.length; i++) {
+          hash = name.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        return 150 + (Math.abs(hash) % 850); // 150g to 1000g
+      };
+
       const result: GemmaDetectionResult = {
-        product_id: p.product_id,
+        product_id: p.product_id || p.sku || "WEB-ITEM",
         product_name: p.product_name,
         brand: p.brand,
         category: p.category,
         sub_category: p.sub_category,
         price: p.price,
-        confidence: p.confidence,
+        confidence: p.confidence || p.gemma_confidence || 0.9,
         verified: p.verified,
-        estimatedWeightGrams: p.estimatedWeightGrams || 70,
+        estimatedWeightGrams: p.estimatedWeightGrams || p.weightGrams || generateWeight(p.product_name),
         imageUrl: p.image_url || undefined,
         detectedAt: new Date().toLocaleTimeString(),
       };
@@ -279,15 +294,9 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
       discount: totals.discount,
       tax: totals.tax,
       total: totals.total,
-      loadCell: {
-        ...loadCell,
-        currentWeightGrams: totals.expectedWeightGrams,
-        expectedWeightGrams: totals.expectedWeightGrams,
-        isStable: true,
-        statusText: "Stable",
-        lastUpdated: new Date().toLocaleTimeString(),
-      },
     });
+
+    get().updateLoadCellWeight(totals.expectedWeightGrams, false);
 
     get().fetchRecommendations();
   },
@@ -304,16 +313,9 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
       discount: totals.discount,
       tax: totals.tax,
       total: totals.total,
-      loadCell: {
-        ...loadCell,
-        currentWeightGrams: totals.expectedWeightGrams,
-        expectedWeightGrams: totals.expectedWeightGrams,
-        isStable: true,
-        statusText: "Stable",
-        lastUpdated: new Date().toLocaleTimeString(),
-      },
     });
 
+    get().updateLoadCellWeight(totals.expectedWeightGrams, false);
     get().fetchRecommendations();
   },
 
@@ -333,15 +335,9 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
       discount: totals.discount,
       tax: totals.tax,
       total: totals.total,
-      loadCell: {
-        ...loadCell,
-        currentWeightGrams: totals.expectedWeightGrams,
-        expectedWeightGrams: totals.expectedWeightGrams,
-        isStable: true,
-        statusText: "Stable",
-        lastUpdated: new Date().toLocaleTimeString(),
-      },
     });
+
+    get().updateLoadCellWeight(totals.expectedWeightGrams, false);
   },
 
   decreaseQuantity: (productId: string) => {
@@ -363,15 +359,9 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
       discount: totals.discount,
       tax: totals.tax,
       total: totals.total,
-      loadCell: {
-        ...loadCell,
-        currentWeightGrams: totals.expectedWeightGrams,
-        expectedWeightGrams: totals.expectedWeightGrams,
-        isStable: true,
-        statusText: "Stable",
-        lastUpdated: new Date().toLocaleTimeString(),
-      },
     });
+
+    get().updateLoadCellWeight(totals.expectedWeightGrams, false);
   },
 
   clearCart: () => {
@@ -382,15 +372,9 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
       discount: 0,
       tax: 0,
       total: 0,
-      loadCell: {
-        ...state.loadCell,
-        currentWeightGrams: 0,
-        expectedWeightGrams: 0,
-        isStable: true,
-        statusText: "Stable",
-        lastUpdated: new Date().toLocaleTimeString(),
-      },
-    }));
+      recommendations: [],
+    });
+    get().updateLoadCellWeight(0, false);
   },
 
   fetchRecommendations: async () => {
@@ -427,13 +411,21 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
     const { recommendations } = get();
     const target = recommendations.find((r) => r.id === recId);
     if (target) {
+      const generateWeight = (name: string) => {
+        let hash = 0;
+        for (let i = 0; i < name.length; i++) {
+          hash = name.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        return 150 + (Math.abs(hash) % 850);
+      };
+      
       const product: Product = {
         id: target.product.id,
         name: target.product.name,
         brand: target.product.brand,
         category: target.product.category || "General",
         price: target.product.price,
-        weightGrams: target.product.weightGrams || 250,
+        weightGrams: target.product.weightGrams || generateWeight(target.product.name),
       };
       get().addItem(product);
     }
@@ -470,15 +462,72 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
     }
   },
 
-  updateLoadCellWeight: (weightGrams: number, isStable = true) => {
-    set((state) => ({
+  updateLoadCellWeight: (targetWeight: number, instant: boolean = false) => {
+    const state = get();
+    if (state.animationInterval) {
+      clearInterval(state.animationInterval);
+    }
+
+    if (instant) {
+      set({
+        loadCell: {
+          ...state.loadCell,
+          currentWeightGrams: targetWeight,
+          expectedWeightGrams: targetWeight,
+          isStable: true,
+          statusText: "Stable",
+          lastUpdated: new Date().toLocaleTimeString(),
+        },
+        animationInterval: null,
+      });
+      return;
+    }
+
+    set({
       loadCell: {
         ...state.loadCell,
-        currentWeightGrams: weightGrams,
-        isStable,
-        statusText: isStable ? "Stable" : "Measuring...",
-        lastUpdated: new Date().toLocaleTimeString(),
+        expectedWeightGrams: targetWeight,
+        isStable: false,
+        statusText: "Measuring...",
       },
-    }));
+    });
+
+    const duration = 1200;
+    const startTime = Date.now();
+    const startWeight = state.loadCell.currentWeightGrams;
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const progress = now - startTime;
+
+      if (progress >= duration) {
+        clearInterval(interval);
+        set((s) => ({
+          loadCell: {
+            ...s.loadCell,
+            currentWeightGrams: targetWeight,
+            isStable: true,
+            statusText: "Stable",
+            lastUpdated: new Date().toLocaleTimeString(),
+          },
+          animationInterval: null,
+        }));
+      } else {
+        const t = progress / duration;
+        // Ease out quint
+        const easeOut = 1 - Math.pow(1 - t, 5);
+        const noise = (Math.random() - 0.5) * 40; // +/- 20g noise for realism
+        const current = startWeight + (targetWeight - startWeight) * easeOut + noise;
+        
+        set((s) => ({
+          loadCell: {
+            ...s.loadCell,
+            currentWeightGrams: Math.max(0, current), // prevent negative weight
+          },
+        }));
+      }
+    }, 50); // 20 FPS update
+
+    set({ animationInterval: interval });
   },
 }));
