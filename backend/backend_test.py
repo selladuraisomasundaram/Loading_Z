@@ -1,0 +1,207 @@
+import sys
+import time
+import json
+import socket
+import urllib.request
+import urllib.parse
+import urllib.error
+
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
+BASE_URL = "http://127.0.0.1:8000"
+
+def is_server_running() -> bool:
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(0.2)
+        result = s.connect_ex(('127.0.0.1', 8000))
+        s.close()
+        return result == 0
+    except Exception:
+        return False
+
+def safe_print(text: str):
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(text.encode('ascii', errors='backslashreplace').decode('ascii'))
+
+def run_tests():
+    live_mode = is_server_running()
+    client = None
+    
+    if live_mode:
+        safe_print("=== SMART TROLLEY BACKEND INTEGRATION TEST (Live HTTP via urllib) ===")
+        safe_print(f"Target URL: {BASE_URL}\n")
+    else:
+        safe_print("=== SMART TROLLEY BACKEND INTEGRATION TEST (FastAPI TestClient In-Memory) ===")
+        safe_print("Note: Live server not detected on port 8000. Running tests via FastAPI TestClient.\n")
+        try:
+            from fastapi.testclient import TestClient
+            from main import app
+            client = TestClient(app)
+        except Exception as e:
+            safe_print(f"Error initializing TestClient: {e}")
+            sys.exit(1)
+
+    passed_count = 0
+    total_count = 5
+
+    def make_request(method: str, path: str, data=None, headers=None):
+        if live_mode:
+            url = f"{BASE_URL}{path}"
+            req = urllib.request.Request(url, data=data, method=method)
+            if headers:
+                for k, v in headers.items():
+                    req.add_header(k, v)
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                return resp.status, json.loads(resp.read().decode('utf-8'))
+        else:
+            kw = {}
+            if headers:
+                kw["headers"] = headers
+            if data:
+                if headers and "multipart/form-data" in headers.get("Content-Type", ""):
+                    kw["content"] = data
+                elif isinstance(data, bytes):
+                    kw["content"] = data
+                else:
+                    kw["data"] = data
+            
+            if method == "GET":
+                r = client.get(path, **kw)
+            elif method == "POST":
+                r = client.post(path, **kw)
+            else:
+                r = client.request(method, path, **kw)
+            return r.status_code, r.json()
+
+    # 1. GET /health
+    safe_print("[Test 1/5] GET /health")
+    try:
+        t0 = time.time()
+        status, data = make_request("GET", "/health")
+        dt = time.time() - t0
+        safe_print(f"  Status Code: {status} (in {dt:.3f}s)")
+        safe_print(f"  Response Body: {json.dumps(data)}")
+        assert status == 200
+        assert "status" in data
+        safe_print("  => SUCCESS\n")
+        passed_count += 1
+    except Exception as e:
+        safe_print(f"  => FAILED: {e}\n")
+
+    # 2. POST /api/v1/vision/analyze
+    safe_print("[Test 2/5] POST /api/v1/vision/analyze")
+    png_bytes = (
+        b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06'
+        b'\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01'
+        b'\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
+    )
+    
+    try:
+        t0 = time.time()
+        if live_mode:
+            boundary = "----WebKitFormBoundaryAntigravityTest"
+            multipart_body = (
+                f"--{boundary}\r\n"
+                f"Content-Disposition: form-data; name=\"image\"; filename=\"test_image.png\"\r\n"
+                f"Content-Type: image/png\r\n\r\n"
+            ).encode('utf-8') + png_bytes + f"\r\n--{boundary}--\r\n".encode('utf-8')
+            headers = {'Content-Type': f'multipart/form-data; boundary={boundary}'}
+            status, data = make_request("POST", "/api/v1/vision/analyze", data=multipart_body, headers=headers)
+        else:
+            files = {"image": ("test_image.png", png_bytes, "image/png")}
+            r = client.post("/api/v1/vision/analyze", files=files)
+            status, data = r.status_code, r.json()
+
+        dt = time.time() - t0
+        safe_print(f"  Status Code: {status} (in {dt:.3f}s)")
+        safe_print(f"  Response Body: {json.dumps(data)}")
+        assert status == 200
+        assert "sku" in data
+        assert "product_name" in data
+        assert "price" in data
+        safe_print("  => SUCCESS\n")
+        passed_count += 1
+    except Exception as e:
+        safe_print(f"  => FAILED: {e}\n")
+
+    # 3. POST /api/v1/assistant/chat
+    safe_print("[Test 3/5] POST /api/v1/assistant/chat")
+    payload = {"message": "Where is Amul Butter?"}
+    try:
+        t0 = time.time()
+        if live_mode:
+            json_data = json.dumps(payload).encode('utf-8')
+            headers = {'Content-Type': 'application/json'}
+            status, data = make_request("POST", "/api/v1/assistant/chat", data=json_data, headers=headers)
+        else:
+            r = client.post("/api/v1/assistant/chat", json=payload)
+            status, data = r.status_code, r.json()
+
+        dt = time.time() - t0
+        safe_print(f"  Status Code: {status} (in {dt:.3f}s)")
+        body_str = json.dumps(data)
+        body_snippet = body_str[:250] + "..." if len(body_str) > 250 else body_str
+        safe_print(f"  Response Body: {body_snippet}")
+        assert status == 200
+        assert "response" in data
+        assert "tool_activity" in data
+        safe_print("  => SUCCESS\n")
+        passed_count += 1
+    except Exception as e:
+        safe_print(f"  => FAILED: {e}\n")
+
+    # 4. GET /api/v1/navigation/route?start=ENTRANCE&destination=AISLE_2
+    safe_print("[Test 4/5] GET /api/v1/navigation/route?start=ENTRANCE&destination=AISLE_2")
+    try:
+        t0 = time.time()
+        path = "/api/v1/navigation/route?start=ENTRANCE&destination=AISLE_2"
+        status, data = make_request("GET", path)
+        dt = time.time() - t0
+        safe_print(f"  Status Code: {status} (in {dt:.3f}s)")
+        safe_print(f"  Response Body: {json.dumps(data)}")
+        assert status == 200
+        assert data["current_location"] == "ENTRANCE"
+        assert data["target_location"] == "AISLE_2"
+        assert "waypoints" in data
+        safe_print("  => SUCCESS\n")
+        passed_count += 1
+    except Exception as e:
+        safe_print(f"  => FAILED: {e}\n")
+
+    # 5. GET /api/v1/telemetry/weight
+    safe_print("[Test 5/5] GET /api/v1/telemetry/weight")
+    try:
+        t0 = time.time()
+        status, data = make_request("GET", "/api/v1/telemetry/weight")
+        dt = time.time() - t0
+        safe_print(f"  Status Code: {status} (in {dt:.3f}s)")
+        safe_print(f"  Response Body: {json.dumps(data)}")
+        assert status == 200
+        assert "weightKg" in data
+        assert data["stable"] is True
+        assert data["connected"] is True
+        assert "timestamp" in data
+        safe_print("  => SUCCESS\n")
+        passed_count += 1
+    except Exception as e:
+        safe_print(f"  => FAILED: {e}\n")
+
+    safe_print(f"=== TEST COMPLETE: {passed_count}/{total_count} PASSED ===")
+    if passed_count == total_count:
+        safe_print("Integration verification successful!")
+        sys.exit(0)
+    else:
+        safe_print("Integration verification encountered issues.")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    run_tests()
+
+
