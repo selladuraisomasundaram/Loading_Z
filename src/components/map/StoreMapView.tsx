@@ -64,6 +64,7 @@ export const StoreMapView: React.FC = () => {
       {/* 2D ARCHITECTURAL DIGITAL SUPERMARKET MAP */}
       <DigitalSupermarketMap
         selectedAisleId={targetLocation}
+        selectedProduct={selectedProduct}
         onAisleSelect={handleAisleSelect}
         onProductSelect={handleProductSelect}
       />

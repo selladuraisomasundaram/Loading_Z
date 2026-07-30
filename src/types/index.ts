@@ -20,7 +20,9 @@ export interface ProductLocation {
 
 export interface Product {
   id: string;
+  productId?: string;
   name: string;
+  productName?: string;
   price: number;
   weightGrams: number;
   category: string;
@@ -28,6 +30,11 @@ export interface Product {
   imageUrl?: string;
   barcode?: string;
   stock?: number;
+  aisleId?: string;
+  shelfId?: string;
+  mapX?: number;
+  mapY?: number;
+  availability?: "In Stock" | "Low Stock" | "Out of Stock";
   location?: ProductLocation;
 }
 

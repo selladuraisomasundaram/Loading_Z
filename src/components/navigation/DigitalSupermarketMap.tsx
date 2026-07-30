@@ -21,12 +21,14 @@ import { Product } from "@/types";
 
 export interface DigitalSupermarketMapProps {
   selectedAisleId?: string;
+  selectedProduct?: Product | null;
   onAisleSelect?: (aisle: AisleData) => void;
   onProductSelect?: (product: Product) => void;
 }
 
 export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
   selectedAisleId = "A3",
+  selectedProduct = null,
   onAisleSelect,
   onProductSelect,
 }) => {
@@ -485,6 +487,44 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
           <span>Orientation: {selectedAisleData.orientation.toUpperCase()}</span>
         </div>
       </div>
+
+      {/* SELECTED PRODUCT LOCATION CARD */}
+      {selectedProduct && (
+        <div className="bg-sky-50 border border-sky-200 rounded-2xl p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center space-x-3.5">
+            <div className="p-3 bg-sky-600 text-white rounded-2xl shadow-xs">
+              <Tag className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-base font-extrabold text-slate-900">
+                  {selectedProduct.name || selectedProduct.productName}
+                </h4>
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                  {selectedProduct.availability || "In Stock"} ({selectedProduct.stock ?? 30} units)
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Category: <strong className="text-slate-800">{selectedProduct.category}</strong> • Price: <strong className="text-slate-800">₹{selectedProduct.price.toFixed(2)}</strong>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 text-xs bg-white border border-sky-200 px-4 py-2.5 rounded-xl">
+            <div className="text-slate-600">
+              Aisle: <strong className="text-sky-700 font-extrabold">{selectedProduct.aisleId || selectedProduct.location?.aisleId || "A3"}</strong>
+            </div>
+            <div className="h-4 w-px bg-slate-200" />
+            <div className="text-slate-600">
+              Shelf: <strong className="text-sky-700 font-extrabold">{selectedProduct.shelfId || selectedProduct.location?.shelfId || "S02"}</strong>
+            </div>
+            <div className="h-4 w-px bg-slate-200" />
+            <div className="text-slate-600">
+              Map Coordinates: <strong className="text-emerald-700 font-mono font-extrabold">({selectedProduct.mapX || selectedProduct.location?.x || 510}, {selectedProduct.mapY || selectedProduct.location?.y || 95})</strong>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
