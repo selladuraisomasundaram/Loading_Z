@@ -18,19 +18,18 @@ import {
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+/**
+ * Checks if mock mode is explicitly forced via environment variable.
+ * Default is FALSE to ensure real Gemma AI intelligence endpoints are called.
+ */
 const isMockMode = (): boolean => {
-  const mockSetting = process.env.NEXT_PUBLIC_USE_MOCK_API;
-  if (mockSetting !== undefined) {
-    return mockSetting === "true";
-  }
-  // Default to mock mode in client environment when no external API server is configured
-  return true;
+  return process.env.NEXT_PUBLIC_USE_MOCK_API === "true";
 };
 
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
-  timeoutMs = 120000
+  timeoutMs = 120000 // 120s timeout to allow local Gemma vision & LLM inference
 ): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -45,12 +44,16 @@ async function fetchWithTimeout(
   } catch (error: unknown) {
     clearTimeout(id);
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("Request timed out while connecting to server.");
+      throw new Error("Gemma AI Vision request timed out.");
     }
-    throw new Error("Backend unavailable. Please check server connection.");
+    throw new Error("Backend unavailable. Please ensure Gemma AI backend server is running on " + BASE_URL);
   }
 }
 
+/**
+ * REAL GEMMA VISION AI IDENTIFICATION ENDPOINT
+ * Directly sends scanned image payloads to Gemma Vision model backend (/api/v1/vision/analyze).
+ */
 export async function identifyProduct(
   file: File
 ): Promise<ProductIdentificationResponse> {
@@ -58,50 +61,57 @@ export async function identifyProduct(
     return await mockIdentifyProduct(file);
   }
 
-  try {
-    const formData = new FormData();
-    formData.append("image", file);
+  const formData = new FormData();
+  formData.append("image", file);
 
-    let response: Response;
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(`${BASE_URL}/api/v1/vision/analyze`, {
+      method: "POST",
+      body: formData,
+    });
+  } catch (err: unknown) {
+    // Retry alternative vision endpoint path
     try {
-      response = await fetchWithTimeout(`${BASE_URL}/api/v1/vision/analyze`, {
-        method: "POST",
-        body: formData,
-      });
-    } catch {
       response = await fetchWithTimeout(`${BASE_URL}/api/products/identify`, {
         method: "POST",
         body: formData,
       });
+    } catch {
+      throw err;
     }
-
-    if (!response.ok) {
-      throw new Error(`Vision service status ${response.status}`);
-    }
-
-    const rawData = await response.json();
-    const productData = {
-      product_id: rawData.product_id || rawData.sku || "SKU-001",
-      product_name: rawData.product_name || "Unknown Product",
-      brand: rawData.brand || "Generic",
-      category: rawData.category || "General",
-      sub_category: rawData.sub_category || "General",
-      price: rawData.price || 0.0,
-      confidence: rawData.confidence || rawData.gemma_confidence || 0.95,
-      verified: rawData.verified ?? true,
-      image_url: rawData.image_url || null,
-    };
-
-    return {
-      success: true,
-      product: productData,
-    };
-  } catch (err: unknown) {
-    console.warn("Vision API unavailable or returned 500 error, falling back to mock vision OCR:", err);
-    return await mockIdentifyProduct(file);
   }
+
+  if (response.status === 404) {
+    throw new Error("Product not recognized in store catalog.");
+  }
+
+  if (!response.ok) {
+    throw new Error(`Gemma Vision AI Service error (HTTP ${response.status}).`);
+  }
+
+  const rawData = await response.json();
+  const productData = {
+    product_id: rawData.product_id || rawData.sku || "SKU-REAL",
+    product_name: rawData.product_name || rawData.name || "Gemma Identified Product",
+    brand: rawData.brand || "Gemma AI",
+    category: rawData.category || "General",
+    sub_category: rawData.sub_category || "General",
+    price: typeof rawData.price === "number" ? rawData.price : 0.0,
+    confidence: typeof rawData.confidence === "number" ? rawData.confidence : (rawData.gemma_confidence || 0.98),
+    verified: rawData.verified ?? true,
+    image_url: rawData.image_url || null,
+  };
+
+  return {
+    success: true,
+    product: productData,
+  };
 }
 
+/**
+ * REAL GEMMA RECOMMENDATION ENDPOINT
+ */
 export async function getRecommendations(
   cartItems: string[]
 ): Promise<RecommendationResponse> {
@@ -109,69 +119,65 @@ export async function getRecommendations(
     return await mockGetRecommendations(cartItems as any);
   }
 
-  try {
-    const payload = {
-      cart_items: cartItems,
-      scanned_item: cartItems.length > 0 ? cartItems[cartItems.length - 1] : undefined
-    };
+  const payload = {
+    cart_items: cartItems,
+    scanned_item: cartItems.length > 0 ? cartItems[cartItems.length - 1] : undefined
+  };
 
-    const response = await fetchWithTimeout(`${BASE_URL}/api/v1/recommendations/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+  const response = await fetchWithTimeout(`${BASE_URL}/api/v1/recommendations/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 
-    if (!response.ok) {
-      throw new Error(`Recommendations status ${response.status}`);
-    }
-
-    const data = (await response.json()) as RecommendationResponse;
-    return data;
-  } catch (err: unknown) {
-    console.warn("Recommendation API failed or returned 500 error, falling back to mock:", err);
-    return await mockGetRecommendations(cartItems as any);
+  if (!response.ok) {
+    throw new Error(`Gemma Recommendation service error (HTTP ${response.status}).`);
   }
+
+  const data = (await response.json()) as RecommendationResponse;
+  return data;
 }
 
+/**
+ * REAL SENSOR TELEMETRY ENDPOINT
+ */
 export async function getSensorData(): Promise<SensorDataResponse> {
   if (isMockMode()) {
     return await mockGetSensorData();
   }
 
+  let response: Response;
   try {
-    let response: Response;
-    try {
-      response = await fetchWithTimeout(`${BASE_URL}/api/v1/telemetry/weight`, {
-        method: "GET",
-        headers: { Accept: "application/json" },
-      }, 5000);
-    } catch {
-      response = await fetchWithTimeout(`${BASE_URL}/api/sensors/load-cell`, {
-        method: "GET",
-        headers: { Accept: "application/json" },
-      }, 5000);
-    }
-
-    if (!response.ok) {
-      throw new Error(`Sensor service status ${response.status}`);
-    }
-
-    const rawData = await response.json();
-    return {
-      success: true,
-      sensor: {
-        weightKg: rawData.weightKg ?? rawData.weight_kg ?? 2.46,
-        stable: rawData.stable ?? true,
-        connected: rawData.connected ?? true,
-        timestamp: rawData.timestamp || new Date().toISOString(),
-      },
-    };
-  } catch (err: unknown) {
-    console.warn("Load cell sensor API failed or returned 500 error, falling back to mock:", err);
-    return await mockGetSensorData();
+    response = await fetchWithTimeout(`${BASE_URL}/api/v1/telemetry/weight`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    }, 5000);
+  } catch {
+    response = await fetchWithTimeout(`${BASE_URL}/api/sensors/load-cell`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    }, 5000);
   }
+
+  if (!response.ok) {
+    throw new Error(`Load cell sensor service error (HTTP ${response.status}).`);
+  }
+
+  const rawData = await response.json();
+  return {
+    success: true,
+    sensor: {
+      weightKg: rawData.weightKg ?? rawData.weight_kg ?? 0.0,
+      stable: rawData.stable ?? true,
+      connected: rawData.connected ?? true,
+      timestamp: rawData.timestamp || new Date().toISOString(),
+    },
+  };
 }
 
+/**
+ * REAL CART CHECKOUT ENDPOINT
+ */
 export async function checkout(
   items: CartItemPayload[]
 ): Promise<CheckoutResponse> {
@@ -179,72 +185,68 @@ export async function checkout(
     return await mockCheckout(items);
   }
 
-  try {
-    const response = await fetchWithTimeout(`${BASE_URL}/api/cart/checkout`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items }),
-    });
+  const response = await fetchWithTimeout(`${BASE_URL}/api/cart/checkout`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items }),
+  });
 
-    if (!response.ok) {
-      throw new Error(`Checkout status ${response.status}`);
-    }
-
-    const data = (await response.json()) as CheckoutResponse;
-    return data;
-  } catch (err: unknown) {
-    console.warn("Checkout API failed or returned 500 error, falling back to mock:", err);
-    return await mockCheckout(items);
+  if (!response.ok) {
+    throw new Error(`Checkout service error (HTTP ${response.status}).`);
   }
+
+  const data = (await response.json()) as CheckoutResponse;
+  return data;
 }
 
+/**
+ * REAL GEMMA ASSISTANT CHAT ENDPOINT
+ */
 export async function sendChatMessage(message: string): Promise<ChatMessage> {
   if (isMockMode()) {
     return await mockSendChatMessage(message);
   }
 
+  let response: Response;
   try {
-    let response: Response;
-    try {
-      response = await fetchWithTimeout(`${BASE_URL}/api/v1/assistant/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
-      }, 120000);
-    } catch {
-      response = await fetchWithTimeout(`${BASE_URL}/api/assistant/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
-      }, 120000);
-    }
-
-    if (!response.ok) {
-      throw new Error(`Assistant status ${response.status}`);
-    }
-
-    const rawData = await response.json();
-    
-    return {
-      id: rawData.id || `msg-bot-${Date.now()}`,
-      sender: "assistant",
-      text: rawData.response || rawData.text || "I have processed your query.",
-      timestamp: rawData.timestamp || new Date().toLocaleTimeString(),
-      targetAisle: rawData.target_aisle || rawData.targetAisle || undefined,
-      toolActivity: rawData.tool_activity || rawData.toolActivity || [],
-      webSearchUsed: Boolean(
-        rawData.tool_activity?.some(
-          (t: { step?: string; action?: string }) =>
-            t.step?.includes("Web") || t.action?.includes("search_web")
-        )
-      ),
-    };
-  } catch (err: unknown) {
-    console.warn("Assistant API failed or returned 500 error, falling back to mock:", err);
-    return await mockSendChatMessage(message);
+    response = await fetchWithTimeout(`${BASE_URL}/api/v1/assistant/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    }, 120000);
+  } catch {
+    response = await fetchWithTimeout(`${BASE_URL}/api/assistant/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    }, 120000);
   }
+
+  if (!response.ok) {
+    throw new Error(`Gemma Assistant service error (HTTP ${response.status}).`);
+  }
+
+  const rawData = await response.json();
+  
+  return {
+    id: rawData.id || `msg-bot-${Date.now()}`,
+    sender: "assistant",
+    text: rawData.response || rawData.text || "I have processed your query.",
+    timestamp: rawData.timestamp || new Date().toLocaleTimeString(),
+    targetAisle: rawData.target_aisle || rawData.targetAisle || undefined,
+    toolActivity: rawData.tool_activity || rawData.toolActivity || [],
+    webSearchUsed: Boolean(
+      rawData.tool_activity?.some(
+        (t: { step?: string; action?: string }) =>
+          t.step?.includes("Web") || t.action?.includes("search_web")
+      )
+    ),
+  };
 }
 
+/**
+ * REAL NAVIGATION ROUTE ENDPOINT
+ */
 export async function getStoreRoute(
   startNode = "ENTRANCE",
   destNode = "AISLE_2"
@@ -253,36 +255,31 @@ export async function getStoreRoute(
     return await mockGetStoreRoute(startNode, destNode);
   }
 
+  let response: Response;
   try {
-    let response: Response;
-    try {
-      const path = `/api/v1/navigation/route?start=${encodeURIComponent(startNode)}&destination=${encodeURIComponent(destNode)}`;
-      response = await fetchWithTimeout(`${BASE_URL}${path}`, {
-        method: "GET",
-        headers: { Accept: "application/json" },
-      });
-    } catch {
-      response = await fetchWithTimeout(`${BASE_URL}/api/navigation/route`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ start_node: startNode, dest_node: destNode }),
-      });
-    }
-
-    if (!response.ok) {
-      throw new Error(`Pathfinder status ${response.status}`);
-    }
-
-    const rawData = await response.json();
-    return {
-      currentLocation: rawData.current_location || rawData.currentLocation || startNode,
-      targetLocation: rawData.target_location || rawData.targetLocation || destNode,
-      waypoints: rawData.waypoints || [startNode, destNode],
-      distanceMeters: rawData.distance_meters || rawData.distanceMeters || 10.0,
-      estimatedTimeSeconds: rawData.estimated_time_seconds || rawData.estimatedTimeSeconds || 15,
-    };
-  } catch (err: unknown) {
-    console.warn("Pathfinder API failed or returned 500 error, falling back to mock:", err);
-    return await mockGetStoreRoute(startNode, destNode);
+    const path = `/api/v1/navigation/route?start=${encodeURIComponent(startNode)}&destination=${encodeURIComponent(destNode)}`;
+    response = await fetchWithTimeout(`${BASE_URL}${path}`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    response = await fetchWithTimeout(`${BASE_URL}/api/navigation/route`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ start_node: startNode, dest_node: destNode }),
+    });
   }
+
+  if (!response.ok) {
+    throw new Error(`Navigation route service error (HTTP ${response.status}).`);
+  }
+
+  const rawData = await response.json();
+  return {
+    currentLocation: rawData.current_location || rawData.currentLocation || startNode,
+    targetLocation: rawData.target_location || rawData.targetLocation || destNode,
+    waypoints: rawData.waypoints || [startNode, destNode],
+    distanceMeters: rawData.distance_meters || rawData.distanceMeters || 10.0,
+    estimatedTimeSeconds: rawData.estimated_time_seconds || rawData.estimatedTimeSeconds || 15,
+  };
 }
