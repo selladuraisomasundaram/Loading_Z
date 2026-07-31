@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Query, Depends
 from typing import List
 from pydantic import BaseModel
-from app.navigation.pathfinder import calculate_route, calculate_tsp_cart_route
+from app.navigation.pathfinder import calculate_route, calculate_optimal_tsp_route
 from app.core.database import DatabaseEngine
 from app.api.deps import get_db
 
@@ -18,19 +18,20 @@ class TSPPayload(BaseModel):
     user_location: list[float] = None
 
 class StopDetail(BaseModel):
+    sku: str
     product_name: str
     aisle: str
+    node: str
     x: float
     y: float
-    is_web_item: bool
 
 from app.gemma.spatial_reasoning import generate_route_explanation
 
 class TSPResponse(BaseModel):
-    route_waypoints: List[List[float]]
-    stops: List[StopDetail]
-    total_distance_meters: float
-    estimated_time_minutes: float
+    waypoints: List[List[float]]
+    stop_sequence: List[StopDetail]
+    total_distance_m: float
+    est_time_sec: int
     gemma_route_insight: str
 
 @router.post("/navigation/route", response_model=TSPResponse)
@@ -40,10 +41,11 @@ def get_tsp_navigation_route(payload: TSPPayload):
     """
     current_pos = tuple(payload.user_location) if payload.user_location and len(payload.user_location) == 2 else (625.0, 125.0)
     
-    result = calculate_tsp_cart_route(payload.cart_items, current_pos)
+    cart_item_ids = [item.get("id", item.get("sku", "")) for item in payload.cart_items]
+    result = calculate_optimal_tsp_route(cart_item_ids, current_pos)
     
     # Generate the Gemma AI insight based on the route
-    insight = generate_route_explanation(result["stops"], result["total_distance_meters"])
+    insight = generate_route_explanation(result["stop_sequence"], result["total_distance_m"])
     result["gemma_route_insight"] = insight
     
     return TSPResponse(**result)
