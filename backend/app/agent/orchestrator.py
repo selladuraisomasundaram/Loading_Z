@@ -103,26 +103,19 @@ async def orchestrate_message(message: str) -> Dict[str, Any]:
     
     tool_activity: List[Dict[str, str]] = []
     
-    # 1. NLP Query Processor
-    tool_activity.append({"step": "NLP Processing", "action": "Analyzing intent & extracting entities"})
-    nlp_result = process_nlp_query(message)
-    intent = nlp_result["intent"]
-    entities = nlp_result["entities"]
+    # 1. Gemma RAG Intelligence Layer
+    tool_activity.append({"step": "NLP Processing", "action": "Analyzing intent & extracting entities via Gemma RAG"})
     
-    tool_activity.append({"step": "Intent Detected", "action": f"Classified as {intent}", "result": str(entities)})
+    rag_result = execute_rag_pipeline(message)
+    intent = rag_result.get("intent", "UNKNOWN")
     
-    # Extract query term from NLP entities (try all relevant fields)
-    query_term = (
-        entities.get("product_name")
-        or entities.get("category")
-        or entities.get("brand")
-        or entities.get("product_id")
-        or entities.get("navigation_request")
-        or message
-    )
-    # Clean filler words for catalog search
+    tool_activity.append({"step": "Intent Detected", "action": f"Classified as {intent}", "result": str(rag_result)})
+    
+    # Extract query term from RAG entities
+    query_term = rag_result.get("product_name") or message
+    
+    # Clean filler words for catalog search just in case Gemma didn't strip them
     for filler in ["where is the", "where is", "where can i find", "show me where", "show me", "take me to the", "take me to", "is", "available", "find me a product for", "cheapest"]:
-        # Only replace exact word matches to avoid replacing "is" inside "biscuits"
         pattern = r'\b' + re.escape(filler) + r'\b'
         if re.search(pattern, query_term, flags=re.IGNORECASE):
             query_term = re.sub(pattern, "", query_term, flags=re.IGNORECASE).strip()

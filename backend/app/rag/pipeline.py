@@ -16,7 +16,7 @@ If the request requires an application action, return a structured action reques
 
 You must output valid JSON ONLY with the following schema:
 {
-    "intent": "search_catalog" | "get_route" | "check_inventory" | "conversational",
+    "intent": "PRODUCT_LOCATION" | "PRODUCT_AVAILABILITY" | "PRODUCT_SEARCH" | "CATEGORY_SEARCH" | "PRODUCT_FILTER" | "NAVIGATION_REQUEST" | "ADD_TO_CART" | "REMOVE_FROM_CART" | "GENERAL_SUPERMARKET_QUERY" | "UNKNOWN",
     "product_id": "SKU or null",
     "product_name": "Name or null",
     "response": "Your natural conversational response based ONLY on the context",
