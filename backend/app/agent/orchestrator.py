@@ -103,28 +103,44 @@ async def orchestrate_message(message: str) -> Dict[str, Any]:
     
     tool_activity: List[Dict[str, str]] = []
     
-    # 1. Gemma RAG Intelligence Layer
-    tool_activity.append({"step": "NLP Processing", "action": "Analyzing intent & extracting entities via Gemma RAG"})
+    # 0. FAST PATH: Quick DB check before heavy NLP
+    tool_activity.append({"step": "Fast Path Lookup", "action": "Checking database for exact matches to bypass heavy LLM inference"})
+    fast_intent = fallback_parse_intent(message)
+    fast_query = fast_intent.get("argument", "").strip()
     
-    rag_result = execute_rag_pipeline(message)
-    intent = rag_result.get("intent", "UNKNOWN")
+    prod_data = None
+    query_term = ""
     
-    tool_activity.append({"step": "Intent Detected", "action": f"Classified as {intent}", "result": str(rag_result)})
-    
-    # Extract query term from RAG entities
-    query_term = rag_result.get("product_name") or message
-    
-    # Clean filler words for catalog search just in case Gemma didn't strip them
-    for filler in ["where is the", "where is", "where can i find", "show me where", "show me", "take me to the", "take me to", "is", "available", "find me a product for", "cheapest"]:
-        pattern = r'\b' + re.escape(filler) + r'\b'
-        if re.search(pattern, query_term, flags=re.IGNORECASE):
-            query_term = re.sub(pattern, "", query_term, flags=re.IGNORECASE).strip()
+    if fast_intent["tool"] == "search_catalog" and fast_query:
+        fast_result = search_catalog(fast_query)
+        if fast_result.get("found"):
+            prod_data = fast_result
+            query_term = fast_query
+            tool_activity.append({"step": "Fast Match Found", "action": f"Bypassed LLM, found '{query_term}' instantly in DB", "result": "Success"})
             
-    query_term = re.sub(r'\s+', ' ', query_term).strip()
+    if prod_data is None:
+        # 1. Gemma RAG Intelligence Layer (Slow Path)
+        tool_activity.append({"step": "NLP Processing", "action": "Analyzing intent & extracting entities via Gemma RAG"})
+        
+        rag_result = execute_rag_pipeline(message)
+        intent = rag_result.get("intent", "UNKNOWN")
+        
+        tool_activity.append({"step": "Intent Detected", "action": f"Classified as {intent}", "result": str(rag_result)})
+        
+        # Extract query term from RAG entities
+        query_term = rag_result.get("product_name") or message
+        
+        # Clean filler words for catalog search just in case Gemma didn't strip them
+        for filler in ["where is the", "where is", "where can i find", "show me where", "show me", "take me to the", "take me to", "is", "available", "find me a product for", "cheapest"]:
+            pattern = r'\b' + re.escape(filler) + r'\b'
+            if re.search(pattern, query_term, flags=re.IGNORECASE):
+                query_term = re.sub(pattern, "", query_term, flags=re.IGNORECASE).strip()
+                
+        query_term = re.sub(r'\s+', ' ', query_term).strip()
 
-    # 2. Database Catalog Search (Source of Truth)
-    tool_activity.append({"step": "Product DB Search", "action": f"Querying smart_trolley.db for '{query_term}'"})
-    prod_data = search_catalog(query_term if query_term else message)
+        # 2. Database Catalog Search (Source of Truth)
+        tool_activity.append({"step": "Product DB Search", "action": f"Querying smart_trolley.db for '{query_term}'"})
+        prod_data = search_catalog(query_term if query_term else message)
     
     target_aisle: Optional[str] = None
     target_product_data: Optional[Dict[str, Any]] = None
