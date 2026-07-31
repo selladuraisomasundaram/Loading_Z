@@ -207,11 +207,14 @@ async def orchestrate_message(message: str) -> Dict[str, Any]:
             "result": f"Stock: {stock} ({availability})"
         })
     else:
-        # Product not found in database
-        response_text = "I couldn't find that product in this supermarket."
+        # Product not found in SQLite DB exactly by name, fallback to Gemma's FAISS RAG response!
+        response_text = rag_result.get("response")
+        if not response_text or response_text == "I found the information.":
+            response_text = "I couldn't find that product in the catalog, but feel free to ask a staff member."
+            
         tool_activity.append({
             "step": "Product DB Search",
-            "action": "Product not found in database",
+            "action": "Product not found in strict DB match, falling back to RAG semantic search",
             "result": "404"
         })
     
