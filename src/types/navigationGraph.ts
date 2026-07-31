@@ -25,11 +25,16 @@ export interface NavigationGraph {
   edges: NavigationEdge[];
 }
 
+import { TurnInstruction } from "./navigation";
+
 export interface AStarResult {
   pathNodeIds: string[];
   waypoints: Array<{ x: number; y: number }>;
   totalDistanceMeters: number;
   estimatedTimeSeconds: number;
+  turnInstructions?: TurnInstruction[];
+  isArrived?: boolean;
+  isOffRoute?: boolean;
   success: boolean;
   error?: string;
 }

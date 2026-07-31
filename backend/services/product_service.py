@@ -8,12 +8,13 @@ from app.navigation.zone_mapper import resolve_coordinates_for_product
 def get_db_session(db: Optional[Session] = None) -> Session:
     return db if db is not None else SessionLocal()
 
-def resolve_product(query_name: str, db: Optional[Session] = None) -> Product:
+def resolve_product(query_name: str, db: Optional[Session] = None, allow_fallback: bool = False) -> Optional[Product]:
     """
     Resolves a single product by query name, brand, or SKU using flexible SQLAlchemy query filters.
+    If allow_fallback is False, returns None when no match is found in the database.
     """
     if not query_name or not query_name.strip():
-        return _get_fallback_product(query_name or "Unknown")
+        return _get_fallback_product(query_name or "Unknown") if allow_fallback else None
 
     session = get_db_session(db)
     should_close = db is None
@@ -54,14 +55,15 @@ def resolve_product(query_name: str, db: Optional[Session] = None) -> Product:
                 _inject_coords(match)
                 return match
 
-        fb = _get_fallback_product(query_name)
-        _inject_coords(fb)
-        return fb
+        if allow_fallback:
+            fb = _get_fallback_product(query_name)
+            _inject_coords(fb)
+            return fb
+            
+        return None
     except Exception as e:
         print(f"Error in resolve_product service: {e}")
-        fb = _get_fallback_product(query_name)
-        _inject_coords(fb)
-        return fb
+        return _get_fallback_product(query_name) if allow_fallback else None
     finally:
         if should_close:
             session.close()

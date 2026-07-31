@@ -234,6 +234,10 @@ export async function sendChatMessage(message: string): Promise<ChatMessage> {
     text: rawData.response || rawData.text || "I have processed your query.",
     timestamp: rawData.timestamp || new Date().toLocaleTimeString(),
     targetAisle: rawData.target_aisle || rawData.targetAisle || undefined,
+    targetProductId: rawData.targetProductId || rawData.target_product?.id || undefined,
+    targetProductName: rawData.targetProductName || rawData.target_product?.name || undefined,
+    targetProduct: rawData.targetProduct || rawData.target_product || undefined,
+    multipleMatches: rawData.multipleMatches || rawData.multiple_matches || undefined,
     toolActivity: rawData.tool_activity || rawData.toolActivity || [],
     webSearchUsed: Boolean(
       rawData.tool_activity?.some(

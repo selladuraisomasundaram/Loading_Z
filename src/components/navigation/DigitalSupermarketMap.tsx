@@ -31,7 +31,13 @@ import {
 import { Product, PersonPosition, TrackedPerson, NavigationRequest, AStarResult } from "@/types";
 import { usePersonPositionStream } from "@/hooks/usePersonPositionStream";
 import { supermarketGraph } from "@/lib/navigation/navigationGraph";
-import { findNearestWalkableNode, findShortestPathAStar } from "@/lib/navigation/aStar";
+import {
+  findNearestWalkableNode,
+  findShortestPathAStar,
+  calculatePathDistance,
+  checkArrivalStatus,
+  checkOffRouteStatus,
+} from "@/lib/navigation/aStar";
 
 export interface MapPosition {
   x: number;
@@ -170,6 +176,12 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
     const destX = selectedProduct.mapX || selectedProduct.location?.x || 510;
     const destY = selectedProduct.mapY || selectedProduct.location?.y || 95;
 
+    const personPos = { x: activePerson.x, y: activePerson.y };
+    const destPos = { x: destX, y: destY };
+
+    // Check arrival status (<= 30px / ~1.5m)
+    const isArrived = checkArrivalStatus(personPos, destPos, 30);
+
     // 1. Map person current position -> nearest walkable node
     const startNode = findNearestWalkableNode(supermarketGraph, activePerson.x, activePerson.y);
 
@@ -181,14 +193,24 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
 
     // 4. Construct complete path sequence: [PersonPos, ...CorridorWaypoints, ProductPos]
     const fullWaypoints = [
-      { x: activePerson.x, y: activePerson.y },
+      personPos,
       ...res.waypoints,
-      { x: destX, y: destY },
+      destPos,
     ];
+
+    // Live path distance & ETA calculation along waypoints
+    const pathDist = calculatePathDistance(fullWaypoints, 1.2);
+
+    // Off-route status detection (> 40px / ~2m)
+    const isOffRoute = checkOffRouteStatus(personPos, res.waypoints, 40);
 
     return {
       ...res,
       waypoints: fullWaypoints,
+      totalDistanceMeters: isArrived ? 0 : pathDist.totalDistanceMeters,
+      estimatedTimeSeconds: isArrived ? 0 : pathDist.estimatedTimeSeconds,
+      isArrived,
+      isOffRoute,
     };
   }, [activePerson.x, activePerson.y, selectedProduct]);
 
@@ -968,6 +990,18 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
             <X className="w-5 h-5" />
           </button>
 
+          {/* ARRIVAL STATE BANNER */}
+          {aStarResult.isArrived && (
+            <div className="bg-emerald-600 text-white rounded-xl p-3.5 flex items-center justify-between shadow-md">
+              <div className="flex items-center gap-2 font-extrabold text-sm">
+                <span>🎉 You've arrived at {selectedProduct.name || selectedProduct.productName} — {selectedProduct.aisleId || "Aisle 3"}.</span>
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-800 text-emerald-100">
+                ARRIVED
+              </span>
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center justify-between gap-4 pr-8">
             <div className="flex items-center space-x-3.5">
               <div className="p-3 bg-sky-600 text-white rounded-2xl shadow-xs">
@@ -978,12 +1012,25 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
                   <h4 className="text-base font-extrabold text-slate-900">
                     📍 {selectedProduct.name || selectedProduct.productName}
                   </h4>
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                  <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                    (selectedProduct.availability || "In Stock") === "Out of Stock"
+                      ? "bg-red-100 text-red-800"
+                      : (selectedProduct.availability || "In Stock") === "Low Stock"
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-emerald-100 text-emerald-800"
+                  }`}>
                     {selectedProduct.availability || "In Stock"} ({selectedProduct.stock ?? 30} units)
                   </span>
+                  {aStarResult.isOffRoute && !aStarResult.isArrived && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300 animate-pulse">
+                      Updating route...
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-slate-600 mt-0.5">
+                  {selectedProduct.brand && (<>Brand: <strong className="text-slate-800">{selectedProduct.brand}</strong> • </>)}
                   Category: <strong className="text-slate-800">{selectedProduct.category}</strong> • Price: <strong className="text-slate-800">₹{selectedProduct.price.toFixed(2)}</strong>
+                  {selectedProduct.shelfId && (<> • Shelf: <strong className="text-slate-800">{selectedProduct.shelfId}</strong></>)}
                 </p>
               </div>
             </div>
@@ -999,7 +1046,7 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
               </div>
               <div className="h-4 w-px bg-slate-200" />
               <div className="text-slate-600">
-                Walk Time: <strong className="text-slate-900 font-mono font-extrabold">~{aStarResult.estimatedTimeSeconds}s</strong>
+                ETA: <strong className="text-slate-900 font-mono font-extrabold">~{aStarResult.estimatedTimeSeconds}s</strong>
               </div>
               <div className="h-4 w-px bg-slate-200" />
               <div className="text-slate-600">
@@ -1007,6 +1054,27 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
               </div>
             </div>
           </div>
+
+          {/* TURN-BY-TURN INSTRUCTIONS PANEL */}
+          {aStarResult.turnInstructions && aStarResult.turnInstructions.length > 0 && !aStarResult.isArrived && (
+            <div className="mt-3 pt-3 border-t border-sky-100 space-y-2">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                Navigation Directions:
+              </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-32 overflow-y-auto custom-scrollbar">
+                {aStarResult.turnInstructions.map((step, idx) => (
+                  <div key={idx} className="text-xs text-slate-700 flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-sky-100 shadow-2xs">
+                    <span className="font-medium truncate pr-2">
+                      {step.stepNumber}. {step.instruction}
+                    </span>
+                    <span className="text-[11px] font-mono font-bold text-sky-700 shrink-0">
+                      {step.distanceMeters}m
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

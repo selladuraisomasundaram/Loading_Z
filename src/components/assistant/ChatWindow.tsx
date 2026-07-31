@@ -7,10 +7,9 @@ import {
   Sparkles,
   MapPin,
   Loader2,
-  Globe,
 } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
-import { ChatMessage } from "@/types";
+import { ChatMessage, Product } from "@/types";
 import { sendChatMessage, sendAudioMessage } from "@/lib/api";
 
 export interface ChatWindowProps {
@@ -131,14 +130,20 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
       audio.play().catch(e => console.error("Audio play error", e));
       
       if (botResponse.targetAisle || botResponse.targetProductId) {
-        setAssistantTargetProduct({
+        const prod: Product = {
           id: botResponse.targetProductId || "assistant-item",
+          productId: botResponse.targetProductId || "assistant-item",
           name: botResponse.targetProductName || "Searched Item",
+          productName: botResponse.targetProductName || "Searched Item",
           price: 0,
           weightGrams: 0,
           category: "Assistant Search",
-          aisleId: botResponse.targetAisle
-        });
+          aisleId: botResponse.targetAisle || "Aisle A1",
+          mapX: 510,
+          mapY: 95,
+          availability: "In Stock"
+        };
+        setAssistantTargetProduct(prod);
         setActiveTab("map");
       }
       
@@ -187,16 +192,26 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
       // Speak the bot response
       speakText(botResponse.text);
       
-      if (botResponse.targetAisle || botResponse.targetProductId) {
-        setAssistantTargetProduct({
+      if (botResponse.targetProduct || botResponse.targetAisle || botResponse.targetProductId) {
+        const prod: Product = botResponse.targetProduct || {
           id: botResponse.targetProductId || "assistant-item",
+          productId: botResponse.targetProductId || "assistant-item",
           name: botResponse.targetProductName || "Searched Item",
+          productName: botResponse.targetProductName || "Searched Item",
           price: 0,
           weightGrams: 0,
           category: "Assistant Search",
-          aisleId: botResponse.targetAisle
-        });
-        setActiveTab("map");
+          aisleId: botResponse.targetAisle || "Aisle A3",
+          mapX: 510,
+          mapY: 95,
+          availability: "In Stock"
+        };
+        // Only auto-navigate for in-stock / low-stock products.
+        // Out-of-stock products can be shown via "Show location anyway" button.
+        const availability = prod.availability || "In Stock";
+        if (availability !== "Out of Stock") {
+          setAssistantTargetProduct(prod);
+        }
       }
       
       onSelectMessage?.(botResponse);
@@ -240,21 +255,90 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
              </p>
            </div>
          ) : (
-           <div className="space-y-2">
-             <p className="text-slate-300 text-sm font-medium leading-relaxed italic opacity-90 line-clamp-3">
-               "{lastBotMessage ? lastBotMessage.text : "Tap to speak with Gemma"}"
-             </p>
-             {lastBotMessage?.targetAisle && (
-               <button
-                 onClick={() => handleShowOnMap(lastBotMessage.targetAisle!)}
-                 className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow-sm"
-               >
-                 <MapPin className="w-3.5 h-3.5" />
-                 Show Route on Map
-               </button>
-             )}
-           </div>
-         )}
+            <div className="space-y-2">
+              <p className="text-slate-300 text-sm font-medium leading-relaxed opacity-90">
+                "{lastBotMessage ? lastBotMessage.text : "Tap to speak with Gemma"}"
+              </p>
+
+              {/* Multi-Match Product Selection Chips */}
+              {lastBotMessage?.multipleMatches && lastBotMessage.multipleMatches.length > 1 && (
+                <div className="pt-2">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+                    Select a matching product:
+                  </span>
+                  <div className="flex flex-wrap gap-2 justify-center">
+                    {lastBotMessage.multipleMatches.map((m: any, idx: number) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          const target: Product = {
+                            id: m.id || m.sku || `SKU-${idx}`,
+                            productId: m.id || m.sku || `SKU-${idx}`,
+                            name: m.product_name || m.name,
+                            productName: m.product_name || m.name,
+                            price: m.price || m.sale_price || 0,
+                            weightGrams: 0,
+                            category: m.category || "Grocery",
+                            aisleId: m.aisle || "Aisle A1",
+                            mapX: m.x || 510,
+                            mapY: m.y || 95,
+                            availability: (m.stock > 0 ? "In Stock" : "Out of Stock") as "In Stock" | "Out of Stock"
+                          };
+                          setAssistantTargetProduct(target);
+                          setActiveTab("map");
+                        }}
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-sky-600 border border-slate-700 text-sky-300 hover:text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center gap-1.5"
+                      >
+                        <span>📍 {m.product_name || m.name}</span>
+                        <span className="text-[10px] opacity-75">({m.aisle || "Aisle 1"})</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {lastBotMessage?.targetAisle && (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => handleShowOnMap(lastBotMessage.targetAisle!)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-sm transition-all"
+                  >
+                    <MapPin className="w-3.5 h-3.5" />
+                    View Route on Map
+                  </button>
+
+                  {/* Show location anyway button for out-of-stock products */}
+                  {lastBotMessage?.targetProduct?.availability === "Out of Stock" && (
+                    <button
+                      onClick={() => {
+                        if (lastBotMessage.targetProduct) {
+                          setAssistantTargetProduct(lastBotMessage.targetProduct as Product);
+                          setActiveTab("map");
+                        }
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold rounded-xl shadow-sm transition-all border border-slate-600"
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                      Show location anyway
+                    </button>
+                  )}
+
+                  {/* Stock status badge */}
+                  {lastBotMessage?.targetProduct && (
+                    <span className={`px-2.5 py-1 text-[10px] font-black rounded-full uppercase tracking-wider ${
+                      lastBotMessage.targetProduct.availability === "Out of Stock"
+                        ? "bg-red-900/50 text-red-300 border border-red-700"
+                        : lastBotMessage.targetProduct.availability === "Low Stock"
+                        ? "bg-amber-900/50 text-amber-300 border border-amber-700"
+                        : "bg-emerald-900/50 text-emerald-300 border border-emerald-700"
+                    }`}>
+                      {lastBotMessage.targetProduct.availability || "In Stock"} ({lastBotMessage.targetProduct.stock ?? "?"} units)
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
       </div>
 
       {/* Central Mic Button */}
@@ -273,36 +357,45 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
       </button>
 
       {/* Text Bubble Suggestions */}
-      <div className="mt-20 w-full max-w-md">
-        <span className="text-xs font-bold text-slate-500 uppercase tracking-widest block text-center mb-6">
-          Suggestions
+      <div className="mt-16 w-full max-w-md">
+        <span className="text-xs font-bold text-slate-500 uppercase tracking-widest block text-center mb-4">
+          Phase 3 Test Queries
         </span>
-        <div className="grid grid-cols-1 gap-3">
+        <div className="grid grid-cols-2 gap-2.5">
           <button
             type="button"
-            onClick={() => handleSendMessage("Where is Amul Butter?")}
-            className="px-5 py-4 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-medium rounded-2xl transition-all hover:-translate-y-1 hover:shadow-lg flex items-center gap-3 justify-center"
+            onClick={() => handleSendMessage("Where is Maggi?")}
+            className="px-3.5 py-3 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium rounded-xl transition-all flex items-center gap-2"
           >
-            <Sparkles className="w-5 h-5 text-amber-400" />
-            "Where is Amul Butter?"
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+            "Where is Maggi?"
           </button>
           
           <button
             type="button"
-            onClick={() => handleSendMessage("Find snacks under ₹50")}
-            className="px-5 py-4 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-medium rounded-2xl transition-all hover:-translate-y-1 hover:shadow-lg flex items-center gap-3 justify-center"
+            onClick={() => handleSendMessage("Where is Aashirvaad Atta?")}
+            className="px-3.5 py-3 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium rounded-xl transition-all flex items-center gap-2"
           >
-            <Sparkles className="w-5 h-5 text-sky-400" />
-            "Find snacks under ₹50"
+            <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+            "Aashirvaad Atta?"
           </button>
           
           <button
             type="button"
-            onClick={() => handleSendMessage("What pairs well with Maggi?")}
-            className="px-5 py-4 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-medium rounded-2xl transition-all hover:-translate-y-1 hover:shadow-lg flex items-center gap-3 justify-center"
+            onClick={() => handleSendMessage("Show me biscuits")}
+            className="px-3.5 py-3 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium rounded-xl transition-all flex items-center gap-2"
           >
-            <Globe className="w-5 h-5 text-cyan-400" />
-            "What pairs well with Maggi?"
+            <Sparkles className="w-4 h-4 text-sky-400 shrink-0" />
+            "Show me biscuits"
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSendMessage("Where is shampoo?")}
+            className="px-3.5 py-3 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium rounded-xl transition-all flex items-center gap-2"
+          >
+            <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+            "Where is shampoo?"
           </button>
         </div>
       </div>

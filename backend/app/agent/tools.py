@@ -1,20 +1,51 @@
 from typing import Dict, Any, Optional
-from app.core.database import resolve_product
+from services.product_service import resolve_product, search_products
 from app.navigation.pathfinder import calculate_route
 
 def search_catalog(query: str) -> Dict[str, Any]:
     """
-    Queries the product database to find a matching product by name or substring.
+    Queries the product database to find matching products by name, category, or substring.
     """
     if not query or not query.strip():
         return {
             "success": False,
+            "found": False,
             "error": "Query cannot be empty"
         }
     
-    product = resolve_product(query)
+    # Check multi-match list to see if query matches a broad category or brand
+    matches = search_products(query, limit=5)
+    product = resolve_product(query, allow_fallback=False)
+    
+    if not product and not matches:
+        return {
+            "success": True,
+            "found": False,
+            "error": f"No product found matching '{query}'"
+        }
+        
+    if not product and matches:
+        first = matches[0]
+        return {
+            "success": True,
+            "found": True,
+            "sku": first.get("sku") or first.get("id"),
+            "product_name": first.get("product_name"),
+            "brand": first.get("brand"),
+            "category": first.get("category"),
+            "sub_category": first.get("sub_category"),
+            "price": first.get("price"),
+            "stock": first.get("stock", 0),
+            "aisle": first.get("aisle", "Aisle 1"),
+            "shelf": first.get("shelf", "Shelf 1"),
+            "x": first.get("x", 200),
+            "y": first.get("y", 350),
+            "matches": matches
+        }
+
     return {
         "success": True,
+        "found": True,
         "sku": product.sku,
         "product_name": product.product_name,
         "brand": product.brand,
@@ -22,9 +53,12 @@ def search_catalog(query: str) -> Dict[str, Any]:
         "sub_category": product.sub_category,
         "price": product.price,
         "stock": product.stock,
-        "aisle": product.aisle,
-        "shelf": product.shelf,
-        "verified": product.verified
+        "aisle": getattr(product, "aisle", "Aisle 1"),
+        "shelf": getattr(product, "shelf", "Shelf 1"),
+        "x": getattr(product, "x", 200),
+        "y": getattr(product, "y", 350),
+        "verified": product.verified,
+        "matches": matches if len(matches) > 1 else []
     }
 
 def get_route(destination: str) -> Dict[str, Any]:

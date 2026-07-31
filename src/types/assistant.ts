@@ -19,6 +19,8 @@ export interface ChatMessage {
   targetAisle?: string;
   targetProductId?: string;
   targetProductName?: string;
+  targetProduct?: any;
+  multipleMatches?: any[];
   webSearchUsed?: boolean;
   webSearchResults?: WebSearchPayload;
 }

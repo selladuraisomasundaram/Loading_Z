@@ -4,13 +4,9 @@ import React, { useState, useEffect } from "react";
 import ProductSearchMap from "@/components/navigation/ProductSearchMap";
 import { Product } from "@/types";
 import { useCart } from "@/hooks/useCart";
-import dynamic from "next/dynamic";
 import { MapPin, Navigation, Sparkles, Navigation2, ShoppingBag } from "lucide-react";
 
-// Dynamically import Leaflet map to avoid SSR issues
-const LeafletStoreMap = dynamic(() => import("@/components/navigation/LeafletStoreMap"), {
-  ssr: false,
-});
+import DigitalSupermarketMap from "@/components/navigation/DigitalSupermarketMap";
 
 export const StoreMapView: React.FC = () => {
   const { items, assistantTargetProduct, setAssistantTargetProduct } = useCart();
@@ -107,13 +103,12 @@ export const StoreMapView: React.FC = () => {
         </div>
       </div>
 
-      {/* CENTER PANEL: Leaflet Map (6 cols) */}
+      {/* CENTER PANEL: Interactive 2D Supermarket Map (6 cols) */}
       <div className="lg:col-span-6 flex flex-col h-full bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="flex-1 relative">
-          <LeafletStoreMap 
+        <div className="flex-1 relative overflow-y-auto p-2">
+          <DigitalSupermarketMap 
             selectedProduct={selectedProduct}
-            routeWaypoints={routeData?.route_waypoints || []}
-            stops={routeData?.stops || []}
+            onProductSelect={handleProductSelect}
           />
         </div>
       </div>

@@ -103,7 +103,7 @@ async def orchestrate_message(message: str) -> Dict[str, Any]:
     
     tool_activity: List[Dict[str, str]] = []
     
-    # 1. NLP Query Processor (Phase 5)
+    # 1. NLP Query Processor
     tool_activity.append({"step": "NLP Processing", "action": "Analyzing intent & extracting entities"})
     nlp_result = process_nlp_query(message)
     intent = nlp_result["intent"]
@@ -111,64 +111,108 @@ async def orchestrate_message(message: str) -> Dict[str, Any]:
     
     tool_activity.append({"step": "Intent Detected", "action": f"Classified as {intent}", "result": str(entities)})
     
-    # 2. LangChain RAG & Gemma reasoning
-    # Send through RAG pipeline to get DB context and Gemma response
-    tool_activity.append({"step": "RAG Retrieval", "action": "Querying FAISS for product knowledge"})
-    rag_response = execute_rag_pipeline(message)
-    
-    response_text = rag_response.get("response", "I could not generate a response.")
-    tool_activity.append({"step": "Gemma Generation", "action": "Synthesized grounded response"})
+    # Extract query term from NLP entities (try all relevant fields)
+    query_term = (
+        entities.get("product_name")
+        or entities.get("category")
+        or entities.get("brand")
+        or entities.get("product_id")
+        or entities.get("navigation_request")
+        or message
+    )
+    # Clean filler words for catalog search
+    for filler in ["where is the", "where is", "where can i find", "show me where", "show me", "take me to the", "take me to", "is", "available", "find me a product for", "cheapest"]:
+        # Only replace exact word matches to avoid replacing "is" inside "biscuits"
+        pattern = r'\b' + re.escape(filler) + r'\b'
+        if re.search(pattern, query_term, flags=re.IGNORECASE):
+            query_term = re.sub(pattern, "", query_term, flags=re.IGNORECASE).strip()
+            
+    query_term = re.sub(r'\s+', ' ', query_term).strip()
+
+    # 2. Database Catalog Search (Source of Truth)
+    tool_activity.append({"step": "Product DB Search", "action": f"Querying smart_trolley.db for '{query_term}'"})
+    prod_data = search_catalog(query_term if query_term else message)
     
     target_aisle: Optional[str] = None
-    route: Optional[Dict[str, Any]] = None
+    target_product_data: Optional[Dict[str, Any]] = None
+    multiple_matches: List[Dict[str, Any]] = []
     
-    # 3. Handle specific action execution (Navigation, Cart) based on RAG output or NLP intent
-    product_name = rag_response.get("product_name") or entities.get("product_name")
-    
-    if rag_response.get("navigation_required") or intent == "NAVIGATION" or intent == "PRODUCT_LOCATION":
-        if product_name or entities.get("navigation_request"):
-            dest_query = product_name or entities.get("navigation_request")
-            # Try to resolve to aisle. RAG pipeline context usually provides the exact aisle.
-            # If we don't have it explicitly, we can attempt a catalog search to find the aisle.
-            prod_data = search_catalog(dest_query)
-            if prod_data.get("success"):
-                aisle = prod_data["aisle"]
-                canonical_dest = map_to_spatial_node(aisle)
-                route_data = get_route(canonical_dest)
-                if route_data.get("success"):
-                    route = route_data
-                    target_aisle = canonical_dest
-                    tool_activity.append({
-                        "step": "Pathfinder Execution",
-                        "action": f"Route ENTRANCE -> {canonical_dest} calculated",
-                        "result": f"Route calculated"
-                    })
-    
-    if rag_response.get("cart_action") == "add" or intent == "ADD_TO_CART":
-        # Simulate cart addition
-        tool_activity.append({"step": "Cart Update", "action": f"Added {product_name} to cart"})
-        response_text += f"\n\n[Action: Added {product_name} to cart]"
+    if prod_data.get("found"):
+        stock = prod_data.get("stock", 0)
+        p_name = prod_data.get("product_name", "Product")
+        aisle = prod_data.get("aisle", "Aisle 1")
+        category = prod_data.get("category", "General")
+        brand = prod_data.get("brand", "")
+        shelf = prod_data.get("shelf", "Shelf 1")
+        multiple_matches = prod_data.get("matches", [])
+
+        # Low stock threshold (configurable)
+        LOW_STOCK_THRESHOLD = 5
         
-    if rag_response.get("cart_action") == "remove" or intent == "REMOVE_FROM_CART":
-        tool_activity.append({"step": "Cart Update", "action": f"Removed {product_name} from cart"})
-        response_text += f"\n\n[Action: Removed {product_name} from cart]"
+        # Determine availability status
+        if stock <= 0:
+            availability = "Out of Stock"
+        elif stock <= LOW_STOCK_THRESHOLD:
+            availability = "Low Stock"
+        else:
+            availability = "In Stock"
+        
+        target_aisle = aisle
+        target_product_data = {
+          "id": prod_data.get("sku") or "SKU-001",
+          "productId": prod_data.get("sku") or "SKU-001",
+          "name": p_name,
+          "productName": p_name,
+          "brand": brand,
+          "price": prod_data.get("price", 0),
+          "stock": stock,
+          "category": category,
+          "aisleId": aisle,
+          "shelfId": shelf,
+          "mapX": prod_data.get("x", 510),
+          "mapY": prod_data.get("y", 95),
+          "availability": availability,
+          "weightGrams": 0
+        }
+        
+        if stock > LOW_STOCK_THRESHOLD:
+            response_text = f"{p_name} is in {aisle}, {category}. It is currently in stock ({stock} units) and about 18 m away."
+        elif stock > 0:
+            response_text = f"{p_name} is in {aisle}, {category}. Only {stock} units left — hurry!"
+        else:
+            response_text = f"{p_name} is located in {aisle}, but it is currently out of stock."
+            
+        tool_activity.append({
+            "step": "Location Resolved",
+            "action": f"Found {p_name} in {aisle}",
+            "result": f"Stock: {stock} ({availability})"
+        })
+    else:
+        # Product not found in database
+        response_text = "I couldn't find that product in this supermarket."
+        tool_activity.append({
+            "step": "Product DB Search",
+            "action": "Product not found in database",
+            "result": "404"
+        })
     
-    # Build response dictionary combining snake_case and camelCase parameters for frontend compatibility
-    timestamp_str = "12:00:00 PM"
+    timestamp_str = new_ts = "12:00:00 PM"
     return {
-        # Prompt matching structure
         "response": response_text,
         "tool_activity": tool_activity,
         "target_aisle": target_aisle,
-        "route": route,
+        "target_product": target_product_data,
+        "multiple_matches": multiple_matches,
         
-        # Frontend ChatMessage contract compatibility
+        # Frontend ChatMessage compatibility
         "id": f"msg-bot-{hashlib.md5(response_text.encode()).hexdigest()[:4].upper()}",
         "sender": "assistant",
         "text": response_text,
         "timestamp": timestamp_str,
         "toolActivity": tool_activity,
         "targetAisle": target_aisle,
-        "targetProductId": product_name, # using name as ID since we don't always have strict SKU in assistant
-        "targetProductName": product_name
+        "targetProductId": target_product_data.get("id") if target_product_data else None,
+        "targetProductName": target_product_data.get("name") if target_product_data else None,
+        "targetProduct": target_product_data,
+        "multipleMatches": multiple_matches
     }

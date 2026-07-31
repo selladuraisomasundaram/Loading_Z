@@ -1,3 +1,10 @@
+export interface TurnInstruction {
+  stepNumber: number;
+  instruction: string;
+  distanceMeters: number;
+  action: "straight" | "turn_left" | "turn_right" | "arrive";
+}
+
 export interface RouteData {
   currentLocation: string;
   targetLocation: string;
@@ -5,6 +12,7 @@ export interface RouteData {
   waypoints: string[];
   distanceMeters: number;
   estimatedTimeSeconds: number;
+  turnInstructions?: TurnInstruction[];
 }
 
 export interface AisleZone {
