@@ -36,8 +36,20 @@ export const StoreMapView: React.FC = () => {
         setRouteData(data);
         
         // Auto-select the first optimized item to route to it!
-        if (data.optimized_route && data.optimized_route.length > 0) {
-          setSelectedProduct(data.optimized_route[0]);
+        if (data.stop_sequence && data.stop_sequence.length > 0) {
+          const firstStop = data.stop_sequence[0];
+          setSelectedProduct({
+            id: firstStop.sku,
+            productId: firstStop.sku,
+            name: firstStop.product_name,
+            productName: firstStop.product_name,
+            price: 0,
+            weightGrams: 0,
+            category: "Optimized Route",
+            aisleId: firstStop.aisle,
+            mapX: firstStop.x,
+            mapY: firstStop.y
+          } as Product);
         } else if (items.length > 0) {
           setSelectedProduct(items[0].product);
         }
@@ -67,11 +79,27 @@ export const StoreMapView: React.FC = () => {
   const handleStartNavigation = () => {
     if (items.length > 0 && !selectedProduct) {
       // Pick first item if none selected
-      setSelectedProduct(routeData?.optimized_route?.[0] || items[0].product);
+      if (routeData?.stop_sequence?.[0]) {
+        const firstStop = routeData.stop_sequence[0];
+        setSelectedProduct({
+            id: firstStop.sku,
+            productId: firstStop.sku,
+            name: firstStop.product_name,
+            productName: firstStop.product_name,
+            price: 0,
+            weightGrams: 0,
+            category: "Optimized Route",
+            aisleId: firstStop.aisle,
+            mapX: firstStop.x,
+            mapY: firstStop.y
+        } as Product);
+      } else {
+        setSelectedProduct(items[0].product);
+      }
     }
     // Just simple visual feedback for the dashboard map mode
-    const navItem = selectedProduct || routeData?.optimized_route?.[0] || items[0].product;
-    alert(`Starting navigation to ${navItem.name || navItem.productName}! The trolley's A* Pathfinding and SLAM systems are actively guiding you.`);
+    const navItemName = selectedProduct?.name || selectedProduct?.productName || routeData?.stop_sequence?.[0]?.product_name || items[0]?.product?.name;
+    alert(`Starting navigation to ${navItemName}! The trolley's A* Pathfinding and SLAM systems are actively guiding you.`);
   };
 
   return (
