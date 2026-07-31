@@ -18,7 +18,7 @@ def get_telemetry_weight():
     current_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     
     return TelemetryResponse(
-        weightKg=2.460,
+        weightKg=0.000,
         stable=True,
         connected=True,
         timestamp=current_time

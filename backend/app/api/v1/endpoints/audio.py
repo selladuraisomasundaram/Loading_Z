@@ -58,12 +58,12 @@ async def audio_chat(audio: UploadFile = File(...)):
         model = get_whisper_model()
         logger.info(f"Transcribing audio file: {tmp_in_path}")
         # Whisper requires FFmpeg installed on the system
-        result = model.transcribe(tmp_in_path)
+        result = model.transcribe(tmp_in_path, fp16=False)
         transcribed_text = result.get("text", "").strip()
         
         logger.info(f"Whisper Transcription: '{transcribed_text}'")
         if not transcribed_text:
-            raise HTTPException(status_code=400, detail="Could not detect speech in the audio.")
+            raise HTTPException(status_code=400, detail="Voice cannot be read. Please speak clearly into your microphone.")
 
         # 3. Process text via RAG / Orchestrator
         bot_response = await orchestrate_message(transcribed_text)
