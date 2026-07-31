@@ -245,6 +245,56 @@ export async function sendChatMessage(message: string): Promise<ChatMessage> {
 }
 
 /**
+ * REAL GEMMA ASSISTANT AUDIO ENDPOINT
+ * Sends raw audio Blob to the Whisper backend, returns ChatMessage and audio Blob URL
+ */
+export async function sendAudioMessage(audioBlob: Blob): Promise<{ message: ChatMessage; audioUrl: string; transcribedText: string }> {
+  if (isMockMode()) {
+    throw new Error("Mock audio chat not implemented");
+  }
+
+  const formData = new FormData();
+  formData.append("audio", audioBlob, "recording.webm");
+
+  const response = await fetchWithTimeout(`${BASE_URL}/api/v1/assistant/audio-chat`, {
+    method: "POST",
+    body: formData,
+  }, 120000); // 2 minute timeout for Whisper inference
+
+  if (!response.ok) {
+    throw new Error(`Audio Assistant service error (HTTP ${response.status}).`);
+  }
+
+  // Parse custom headers for text metadata
+  const transcribedText = decodeURIComponent(response.headers.get("X-Transcribed-Text") || "");
+  const botResponseHeader = response.headers.get("X-Bot-Response");
+  let botData: any = {};
+  
+  if (botResponseHeader) {
+    try {
+      botData = JSON.parse(decodeURIComponent(botResponseHeader));
+    } catch (e) {
+      console.error("Failed to parse bot response header", e);
+    }
+  }
+
+  const message: ChatMessage = {
+    id: `msg-bot-${Date.now()}`,
+    sender: "assistant",
+    text: botData.text || "I processed your voice message.",
+    timestamp: new Date().toLocaleTimeString(),
+    targetAisle: botData.targetAisle,
+    toolActivity: botData.toolActivity || [],
+  };
+
+  // Convert the response body (mp3) to an object URL for playback
+  const responseBlob = await response.blob();
+  const audioUrl = URL.createObjectURL(responseBlob);
+
+  return { message, audioUrl, transcribedText };
+}
+
+/**
  * REAL NAVIGATION ROUTE ENDPOINT
  */
 export async function getStoreRoute(

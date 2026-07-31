@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { ChatMessage } from "@/types";
-import { sendChatMessage } from "@/lib/api";
+import { sendChatMessage, sendAudioMessage } from "@/lib/api";
 
 export interface ChatWindowProps {
   onSelectMessage?: (msg: ChatMessage) => void;
@@ -24,7 +24,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
   const [inputValue, setInputValue] = useState("");
   const [liveTranscript, setLiveTranscript] = useState("");
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
-  const recognizerRef = React.useRef<any>(null);
+  const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
+  const audioChunksRef = React.useRef<Blob[]>([]);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -47,8 +48,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
   // Clean up mic on unmount
   useEffect(() => {
     return () => {
-      if (recognizerRef.current) {
-        try { recognizerRef.current.stop(); } catch (e) {}
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        mediaRecorderRef.current.stop();
       }
     };
   }, []);
@@ -63,94 +64,99 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
     }
   };
 
-  const toggleMic = () => {
-    // Stop any ongoing speech when interacting with mic
+  const toggleMic = async () => {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
 
     if (isMicActive) {
       setIsMicActive(false);
-      setLiveTranscript("");
-      if (recognizerRef.current) {
-        try { recognizerRef.current.stop(); } catch (e) {}
+      setLiveTranscript("Processing audio...");
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        mediaRecorderRef.current.stop();
       }
     } else {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        console.warn("Web Speech API not supported in this browser.");
-        return;
-      }
-
-      setIsMicActive(true);
-      setLiveTranscript("");
-
-      const recognizer = new SpeechRecognition();
-      recognizerRef.current = recognizer;
-      recognizer.lang = "en-US";
-      recognizer.continuous = false; // Setting to false fixes 'network' errors on many browsers/proxies
-      recognizer.interimResults = false; // DISABLED: Some browsers throw 'network' error due to high volume of interim requests
-      recognizer.maxAlternatives = 1;
-
-      let finalCaptured = false;
-
-      recognizer.onresult = (event: any) => {
-        let finalStr = "";
-        
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalStr += event.results[i][0].transcript;
-          }
-        }
-        
-        if (finalStr.trim()) {
-          setLiveTranscript(finalStr);
-          finalCaptured = true;
-          try { recognizer.stop(); } catch(e) {}
-          setIsMicActive(false);
-          handleSendMessage(finalStr.trim());
-        }
-      };
-
-      recognizer.onerror = (e: any) => {
-        console.error("Speech recognition error:", e.error);
-        if (e.error === 'network') {
-          console.warn("Browser Speech API blocked. Falling back to simulated voice input for testing.");
-          setLiveTranscript("Network blocked speech. Simulating voice input...");
-          
-          // Simulate voice input for testing the UI
-          setTimeout(() => {
-            const simulatedText = "Where is Amul Butter?";
-            setLiveTranscript(simulatedText);
-            
-            setTimeout(() => {
-              setIsMicActive(false);
-              handleSendMessage(simulatedText);
-            }, 1000);
-          }, 1500);
-
-        } else if (e.error !== 'no-speech') {
-          setIsMicActive(false);
-        }
-      };
-
-      recognizer.onend = () => {
-        if (!finalCaptured && isMicActive) {
-          // If it ended naturally but we didn't catch a final result, the mic should close visually unless it's a network error being displayed.
-          setLiveTranscript((prev) => {
-            if (prev.startsWith("Network error")) return prev;
-            setIsMicActive(false);
-            return "";
-          });
-        }
-      };
-
       try {
-        recognizer.start();
-      } catch (e) {
-        console.error("Mic start error:", e);
-        setIsMicActive(false);
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = () => {
+          const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+          handleSendAudioMessage(audioBlob);
+          // Stop all tracks to release microphone
+          stream.getTracks().forEach((track) => track.stop());
+        };
+
+        mediaRecorder.start();
+        setIsMicActive(true);
+        setLiveTranscript("Listening (recording audio)...");
+      } catch (err) {
+        console.error("Microphone access error:", err);
+        setLiveTranscript("Error: Microphone access denied or unavailable.");
+        setTimeout(() => setLiveTranscript(""), 3000);
       }
+    }
+  };
+
+  const handleSendAudioMessage = async (audioBlob: Blob) => {
+    if (isProcessing) return;
+    setIsProcessing(true);
+
+    try {
+      const { message: botResponse, audioUrl, transcribedText } = await sendAudioMessage(audioBlob);
+      
+      // Add the user's transcribed message to the chat visually
+      const userMsg: ChatMessage = {
+        id: `msg-user-${Date.now()}`,
+        sender: "user",
+        text: transcribedText || "Audio message",
+        timestamp: new Date().toLocaleTimeString(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      setLiveTranscript("");
+      
+      // Add bot response
+      setMessages((prev) => [...prev, botResponse]);
+      
+      // Play the generated audio file
+      const audio = new Audio(audioUrl);
+      audio.play().catch(e => console.error("Audio play error", e));
+      
+      if (botResponse.targetAisle || botResponse.targetProductId) {
+        setAssistantTargetProduct({
+          id: botResponse.targetProductId || "assistant-item",
+          name: botResponse.targetProductName || "Searched Item",
+          price: 0,
+          weightGrams: 0,
+          category: "Assistant Search",
+          aisleId: botResponse.targetAisle
+        });
+        setActiveTab("map");
+      }
+      
+      onSelectMessage?.(botResponse);
+    } catch (e: any) {
+      console.error(e);
+      const errorMsg: ChatMessage = {
+        id: `msg-err-${Date.now()}`,
+        sender: "assistant",
+        text: "Audio service unavailable. Please ensure the backend is running with Whisper installed.",
+        timestamp: new Date().toLocaleTimeString(),
+        toolActivity: [{ step: "Network Error", action: "Failed to process audio", result: "Timeout" }],
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+      speakText(errorMsg.text);
+      setLiveTranscript("");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
