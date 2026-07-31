@@ -4,17 +4,16 @@ from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
-# Define exact intents as requested
+# Define exact intents as requested for Phase 8
 INTENTS = [
-    "PRODUCT_SEARCH",
     "PRODUCT_LOCATION",
-    "PRODUCT_PRICE",
     "PRODUCT_AVAILABILITY",
-    "PRODUCT_CATEGORY_SEARCH",
-    "PRODUCT_COMPARISON",
+    "PRODUCT_SEARCH",
+    "CATEGORY_SEARCH",
+    "PRODUCT_FILTER",
+    "NAVIGATION_REQUEST",
     "ADD_TO_CART",
     "REMOVE_FROM_CART",
-    "NAVIGATION",
     "GENERAL_SUPERMARKET_QUERY",
     "UNKNOWN"
 ]
@@ -66,7 +65,7 @@ def process_nlp_query(query: str) -> Dict[str, Any]:
     # 1. NAVIGATION
     nav_keywords = {"take me", "navigate", "route", "directions", "how to go", "guide me", "path to"}
     if any(k in lower for k in nav_keywords):
-        result["intent"] = "NAVIGATION"
+        result["intent"] = "NAVIGATION_REQUEST"
         dest = re.sub(r'.*(take me to|navigate to|route to|directions for|directions to|how to go to|path to)\s+', '', lower)
         result["entities"]["navigation_request"] = dest.strip('?.! ,')
         return result
@@ -84,11 +83,11 @@ def process_nlp_query(query: str) -> Dict[str, Any]:
         result["entities"]["product_name"] = re.sub(r'.*(remove|delete)\s+', '', lower).replace('from cart', '').replace('from my cart', '').strip('?.! ,')
         return result
 
-    # 3. PRODUCT PRICE
-    price_keywords = {"price", "cost", "how much is", "how much does"}
+    # 3. PRODUCT FILTER (Price/Constraints)
+    price_keywords = {"price", "cost", "how much is", "how much does", "under", "below", "cheapest"}
     if any(k in lower for k in price_keywords):
-        result["intent"] = "PRODUCT_PRICE"
-        result["entities"]["product_name"] = re.sub(r'.*(price of|cost of|how much is|how much does)\s+', '', lower).strip('?.! ,')
+        result["intent"] = "PRODUCT_FILTER"
+        result["entities"]["product_name"] = re.sub(r'.*(price of|cost of|how much is|how much does|under|below|cheapest)\s+', '', lower).strip('?.! ,')
         return result
 
     # 4. PRODUCT LOCATION
@@ -100,21 +99,21 @@ def process_nlp_query(query: str) -> Dict[str, Any]:
         return result
 
     # 5. PRODUCT AVAILABILITY
-    avail_keywords = {"do you have", "in stock", "is there any", "availability"}
+    avail_keywords = {"do you have", "in stock", "is there any", "availability", "available"}
     if any(k in lower for k in avail_keywords):
         result["intent"] = "PRODUCT_AVAILABILITY"
-        result["entities"]["product_name"] = re.sub(r'.*(do you have|is there any|availability of)\s+', '', lower).replace('in stock', '').strip('?.! ,')
+        result["entities"]["product_name"] = re.sub(r'.*(do you have|is there any|availability of|is)\s+', '', lower).replace('in stock', '').replace('available', '').strip('?.! ,')
         return result
         
-    # 6. PRODUCT COMPARISON
+    # 6. PRODUCT FILTER (Comparison)
     if "compare" in lower or (" vs " in lower and len(clean_query) < 50):
-        result["intent"] = "PRODUCT_COMPARISON"
+        result["intent"] = "PRODUCT_FILTER"
         result["entities"]["product_name"] = lower.replace("compare", "").strip('?.! ,')
         return result
 
-    # 7. PRODUCT CATEGORY SEARCH
+    # 7. CATEGORY SEARCH
     if result["entities"]["price_constraint"] or any(k in lower for k in {"list", "show me", "what kind of", "types of", "brands of", "show"}):
-        result["intent"] = "PRODUCT_CATEGORY_SEARCH"
+        result["intent"] = "CATEGORY_SEARCH"
         cat = re.sub(r'.*(list|show me|show|what kind of|types of|brands of)\s+', '', lower)
         # Strip price constraint text from category if present
         cat = re.sub(r'(under|below|less than|max|maximum|above|over|more than|min|minimum)\s*(?:rs|inr|rupees|₹)?\s*(\d+)', '', cat)

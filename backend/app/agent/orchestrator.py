@@ -175,12 +175,38 @@ async def orchestrate_message(message: str) -> Dict[str, Any]:
           "weightGrams": 0
         }
         
-        if stock > LOW_STOCK_THRESHOLD:
-            response_text = f"{p_name} is in {aisle}, {category}. It is currently in stock ({stock} units) and about 18 m away."
-        elif stock > 0:
-            response_text = f"{p_name} is in {aisle}, {category}. Only {stock} units left — hurry!"
+        from langchain_ollama import OllamaLLM
+        from app.gemma.engine import OLLAMA_HOST, GEMMA_MODEL
+        
+        # Format the context for Gemma to generate a natural response
+        gemma_prompt = (
+            "You are a Smart Supermarket Assistant. A user asked a query. "
+            "Based ONLY on the product details below, write a very concise (1-2 sentences), natural response. "
+            "Do NOT invent information. "
+            f"User Query: '{message}'\n"
+            f"Product: {p_name}\n"
+            f"Category: {category}\n"
+            f"Aisle: {aisle}\n"
+            f"Stock: {stock} units\n"
+        )
+        if stock <= 0:
+            gemma_prompt += "Instruction: Tell the user it is out of stock but state the aisle it belongs in."
+        elif stock <= LOW_STOCK_THRESHOLD:
+            gemma_prompt += "Instruction: Tell the user it is in stock but warn them it's running low. State the aisle."
         else:
-            response_text = f"{p_name} is located in {aisle}, but it is currently out of stock."
+            gemma_prompt += "Instruction: Tell the user it is in stock and state the aisle."
+
+        try:
+            llm = OllamaLLM(base_url=OLLAMA_HOST, model=GEMMA_MODEL)
+            response_text = llm.invoke(gemma_prompt).strip()
+        except Exception as e:
+            # Fallback if Gemma is offline
+            if stock > LOW_STOCK_THRESHOLD:
+                response_text = f"{p_name} is in {aisle}, {category}. It is currently in stock."
+            elif stock > 0:
+                response_text = f"{p_name} is in {aisle}, {category}. Only {stock} units left — hurry!"
+            else:
+                response_text = f"{p_name} is located in {aisle}, but it is currently out of stock."
             
         tool_activity.append({
             "step": "Location Resolved",
