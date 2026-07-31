@@ -38,6 +38,8 @@ import {
   checkArrivalStatus,
   checkOffRouteStatus,
 } from "@/lib/navigation/aStar";
+import { slamService, SlamStatus } from "@/lib/slam/slamService";
+import { slamToMapCoordinates, Pose } from "@/lib/slam/coordinateAdapter";
 
 export interface MapPosition {
   x: number;
@@ -65,13 +67,61 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
   // Real-Time Stream Hook (Noise threshold = 5px, Multi-person tracking via personId)
   const {
     trackedPersons,
-    activePerson,
+    activePerson: simPerson,
     connectionStatus,
     isSimulating,
     setIsSimulating,
     processIncomingPosition,
     moveActivePerson,
   } = usePersonPositionStream({ autoSimulate: false, noiseThreshold: 5.0 });
+
+  // Localization Source Mode
+  type LocationSource = 'simulation' | 'esp32' | 'slam';
+  const [locationSource, setLocationSource] = useState<LocationSource>('simulation');
+  
+  // SLAM State
+  const [slamPose, setSlamPose] = useState<Pose | null>(null);
+  const [slamStatus, setSlamStatus] = useState<SlamStatus>('waiting');
+
+  // activePerson resolves dynamically based on selected Location Source
+  const activePerson = useMemo(() => {
+    if (locationSource === 'slam' && slamPose) {
+      // Translate SLAM coordinates to UI Coordinates
+      const uiPos = slamToMapCoordinates(slamPose.x, slamPose.y);
+      return {
+        ...simPerson,
+        x: uiPos.x,
+        y: uiPos.y,
+        theta: slamPose.theta, // Inject orientation
+      };
+    }
+    return simPerson;
+  }, [locationSource, slamPose, simPerson]);
+
+  // Manage SLAM WebSocket connection lifecycle
+  useEffect(() => {
+    if (locationSource === 'slam') {
+      slamService.connect();
+      
+      const unsubPose = slamService.onPoseUpdate((pose) => {
+        setSlamPose(pose);
+      });
+      const unsubStatus = slamService.onStatusUpdate((status) => {
+        setSlamStatus(status);
+      });
+
+      return () => {
+        unsubPose();
+        unsubStatus();
+        slamService.disconnect();
+      };
+    } else {
+      slamService.disconnect();
+      setSlamPose(null);
+      setSlamStatus('waiting');
+      return () => {}; // return empty cleanup function to satisfy TS
+    }
+  }, [locationSource]);
 
   // Map Controls State
   const [mapZoom, setMapZoom] = useState<number>(1.0);
@@ -169,50 +219,71 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
       }
     : null;
 
+  // A* Route Optimization State
+  const [cachedRoute, setCachedRoute] = useState<AStarResult | null>(null);
+
   // A* Shortest-Path Calculation Engine (Avoids shelves, walls & non-walkable areas)
-  const aStarResult: AStarResult | null = useMemo(() => {
-    if (!selectedProduct) return null;
+  // Re-calculates ONLY when destination changes, or if the user deviates off-route (performance optimization)
+  useEffect(() => {
+    if (!selectedProduct) {
+      setCachedRoute(null);
+      return;
+    }
 
     const destX = selectedProduct.mapX || selectedProduct.location?.x || 510;
     const destY = selectedProduct.mapY || selectedProduct.location?.y || 95;
-
     const personPos = { x: activePerson.x, y: activePerson.y };
     const destPos = { x: destX, y: destY };
 
-    // Check arrival status (<= 30px / ~1.5m)
+    // Check if we need to recalculate:
+    // 1. If we have no cached route yet
+    // 2. If the destination product changed (checked implicitly if we store last dest)
+    // 3. If we are off-route
+    let needsRecalc = !cachedRoute;
+    
+    if (cachedRoute) {
+      const isOffRoute = checkOffRouteStatus(personPos, cachedRoute.waypoints, 40); // 40px tolerance
+      if (isOffRoute) {
+        needsRecalc = true;
+      }
+    }
+
+    if (needsRecalc) {
+      const startNode = findNearestWalkableNode(supermarketGraph, activePerson.x, activePerson.y);
+      const goalNode = findNearestWalkableNode(supermarketGraph, destX, destY);
+      const res = findShortestPathAStar(supermarketGraph, startNode.id, goalNode.id);
+
+      setCachedRoute({
+        ...res,
+        // Calculate initial distance based on full path
+        totalDistanceMeters: calculatePathDistance([personPos, ...res.waypoints, destPos], 1.2).totalDistanceMeters,
+      });
+    }
+  }, [selectedProduct, activePerson.x, activePerson.y]);
+
+  // Live Path Distance (Fast calculation along the cached route waypoints)
+  const aStarResult = useMemo(() => {
+    if (!cachedRoute || !selectedProduct) return null;
+    
+    const destX = selectedProduct.mapX || selectedProduct.location?.x || 510;
+    const destY = selectedProduct.mapY || selectedProduct.location?.y || 95;
+    const personPos = { x: activePerson.x, y: activePerson.y };
+    const destPos = { x: destX, y: destY };
+
     const isArrived = checkArrivalStatus(personPos, destPos, 30);
-
-    // 1. Map person current position -> nearest walkable node
-    const startNode = findNearestWalkableNode(supermarketGraph, activePerson.x, activePerson.y);
-
-    // 2. Map destination product -> nearest walkable node
-    const goalNode = findNearestWalkableNode(supermarketGraph, destX, destY);
-
-    // 3. Compute A* shortest path over navigation graph
-    const res = findShortestPathAStar(supermarketGraph, startNode.id, goalNode.id);
-
-    // 4. Construct complete path sequence: [PersonPos, ...CorridorWaypoints, ProductPos]
-    const fullWaypoints = [
-      personPos,
-      ...res.waypoints,
-      destPos,
-    ];
-
-    // Live path distance & ETA calculation along waypoints
+    const fullWaypoints = [personPos, ...cachedRoute.waypoints, destPos];
     const pathDist = calculatePathDistance(fullWaypoints, 1.2);
-
-    // Off-route status detection (> 40px / ~2m)
-    const isOffRoute = checkOffRouteStatus(personPos, res.waypoints, 40);
+    const isOffRoute = checkOffRouteStatus(personPos, cachedRoute.waypoints, 40);
 
     return {
-      ...res,
+      ...cachedRoute,
       waypoints: fullWaypoints,
       totalDistanceMeters: isArrived ? 0 : pathDist.totalDistanceMeters,
       estimatedTimeSeconds: isArrived ? 0 : pathDist.estimatedTimeSeconds,
       isArrived,
       isOffRoute,
     };
-  }, [activePerson.x, activePerson.y, selectedProduct]);
+  }, [cachedRoute, activePerson.x, activePerson.y, selectedProduct]);
 
   // Zoom Controls
   const handleZoomIn = () => setMapZoom((prev) => Math.min(prev + 0.25, 3.0));
@@ -309,18 +380,45 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
 
         {/* MAP TOOLBAR & CONTROLS */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Stream Simulator Toggle */}
-          <button
-            onClick={() => setIsSimulating(!isSimulating)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all border flex items-center gap-1.5 shadow-2xs ${
-              isSimulating
-                ? "bg-emerald-600 border-emerald-700 text-white animate-pulse"
-                : "bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100"
-            }`}
+          {/* Localization Source Selector */}
+          <select
+            value={locationSource}
+            onChange={(e) => setLocationSource(e.target.value as LocationSource)}
+            className="px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all border bg-slate-50 border-slate-200 text-slate-700 shadow-2xs outline-none focus:border-sky-300"
           >
-            <Radio className="w-3.5 h-3.5" />
-            <span>{isSimulating ? "📡 Stream Active" : "Simulate Stream"}</span>
-          </button>
+            <option value="simulation">Mode: Simulation</option>
+            <option value="esp32">Mode: ESP32 Load Cell</option>
+            <option value="slam">Mode: Real SLAM</option>
+          </select>
+
+          {/* SLAM Connection Status (Visible only in SLAM mode) */}
+          {locationSource === 'slam' && (
+            <div className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all border flex items-center gap-1.5 shadow-2xs ${
+              slamStatus === 'active'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : slamStatus === 'lost'
+                ? 'bg-rose-50 border-rose-200 text-rose-800 animate-pulse'
+                : 'bg-amber-50 border-amber-200 text-amber-800 animate-pulse'
+            }`}>
+              <Radio className="w-3.5 h-3.5" />
+              <span>SLAM: {slamStatus.toUpperCase()}</span>
+            </div>
+          )}
+
+          {/* Stream Simulator Toggle (Hidden in SLAM mode) */}
+          {locationSource !== 'slam' && (
+            <button
+              onClick={() => setIsSimulating(!isSimulating)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all border flex items-center gap-1.5 shadow-2xs ${
+                isSimulating
+                  ? "bg-emerald-600 border-emerald-700 text-white animate-pulse"
+                  : "bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100"
+              }`}
+            >
+              <Radio className="w-3.5 h-3.5" />
+              <span>{isSimulating ? "📡 Stream Active" : "Simulate Stream"}</span>
+            </button>
+          )}
 
           {/* Zoom & Reset Toolbar */}
           <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
@@ -859,11 +957,16 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
               })}
 
             {/* 11. REAL-TIME MULTI-PERSON POSITIONING MARKERS (👤 personId) */}
-            {Object.values(trackedPersons).map((person: TrackedPerson) => (
+            {Object.values(trackedPersons).map((rawPerson: TrackedPerson) => {
+              // Override with activePerson if it's the tracked one (injects SLAM pos/theta)
+              const person = rawPerson.personId === activePerson.personId ? activePerson : rawPerson;
+              const rotationDegree = person.theta !== undefined ? (person.theta * 180) / Math.PI : 0;
+              
+              return (
               <g
                 key={person.personId}
                 id={`person-marker-${person.personId}`}
-                className="transition-all duration-700 ease-in-out cursor-pointer"
+                className="transition-all duration-700 ease-linear cursor-pointer"
               >
                 <circle
                   cx={person.x}
@@ -873,6 +976,15 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
                   fillOpacity={0.25}
                   className="animate-ping"
                 />
+                {/* Directional Triangle Indicator (SLAM Orientation) */}
+                {person.theta !== undefined && (
+                  <polygon
+                    points={`${person.x},${person.y - 14} ${person.x - 7},${person.y + 4} ${person.x + 7},${person.y + 4}`}
+                    fill="#059669"
+                    transform={`rotate(${rotationDegree}, ${person.x}, ${person.y})`}
+                    opacity={0.8}
+                  />
+                )}
                 <circle
                   cx={person.x}
                   cy={person.y}
@@ -907,7 +1019,8 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
                   👤 {person.personId} ({person.aisleId})
                 </text>
               </g>
-            ))}
+              );
+            })}
           </g>
         </svg>
       </div>

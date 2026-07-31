@@ -41,6 +41,7 @@ export interface TrackedPerson {
   name: string;
   x: number;
   y: number;
+  theta?: number; // Optional rotation in radians from SLAM
   zoneId: string;
   aisleId: string;
   timestamp: string;
