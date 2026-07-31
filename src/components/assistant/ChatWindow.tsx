@@ -188,11 +188,6 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
       setIsProcessing(false);
     }
   };
-      setMessages((prev) => [...prev, errorMsg]);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
 
   const handleShowOnMap = (_aisle: string) => {
     setActiveTab("map");
