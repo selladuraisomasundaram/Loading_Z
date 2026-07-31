@@ -88,9 +88,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
       const recognizer = new SpeechRecognition();
       recognizerRef.current = recognizer;
       recognizer.lang = "en-US";
-      recognizer.continuous = true;
+      recognizer.continuous = false; // Setting to false fixes 'network' errors on many browsers/proxies
       recognizer.interimResults = true;
       recognizer.maxAlternatives = 1;
+
+      let finalCaptured = false;
 
       recognizer.onresult = (event: any) => {
         let interim = "";
@@ -108,6 +110,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
         setLiveTranscript(transcriptStr);
         
         if (finalStr.trim()) {
+          finalCaptured = true;
           try { recognizer.stop(); } catch(e) {}
           setIsMicActive(false);
           handleSendMessage(finalStr.trim());
@@ -116,13 +119,23 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
 
       recognizer.onerror = (e: any) => {
         console.error("Speech recognition error:", e.error);
-        if (e.error !== 'no-speech') {
+        if (e.error === 'network') {
+          setLiveTranscript("Network error: Browser speech service unavailable. Please use standard Chrome or check connection.");
+          setTimeout(() => setIsMicActive(false), 4000); // Leave error visible
+        } else if (e.error !== 'no-speech') {
           setIsMicActive(false);
         }
       };
 
       recognizer.onend = () => {
-        setIsMicActive(false);
+        if (!finalCaptured && isMicActive) {
+          // If it ended naturally but we didn't catch a final result, the mic should close visually unless it's a network error being displayed.
+          setLiveTranscript((prev) => {
+            if (prev.startsWith("Network error")) return prev;
+            setIsMicActive(false);
+            return "";
+          });
+        }
       };
 
       try {
