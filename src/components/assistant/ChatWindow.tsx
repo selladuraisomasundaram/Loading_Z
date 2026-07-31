@@ -89,27 +89,22 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
       recognizerRef.current = recognizer;
       recognizer.lang = "en-US";
       recognizer.continuous = false; // Setting to false fixes 'network' errors on many browsers/proxies
-      recognizer.interimResults = true;
+      recognizer.interimResults = false; // DISABLED: Some browsers throw 'network' error due to high volume of interim requests
       recognizer.maxAlternatives = 1;
 
       let finalCaptured = false;
 
       recognizer.onresult = (event: any) => {
-        let interim = "";
         let finalStr = "";
         
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           if (event.results[i].isFinal) {
             finalStr += event.results[i][0].transcript;
-          } else {
-            interim += event.results[i][0].transcript;
           }
         }
         
-        const transcriptStr = finalStr || interim;
-        setLiveTranscript(transcriptStr);
-        
         if (finalStr.trim()) {
+          setLiveTranscript(finalStr);
           finalCaptured = true;
           try { recognizer.stop(); } catch(e) {}
           setIsMicActive(false);
