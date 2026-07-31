@@ -67,7 +67,7 @@ async def audio_chat(audio: UploadFile = File(...)):
 
         # 3. Process text via RAG / Orchestrator
         bot_response = await orchestrate_message(transcribed_text)
-        response_text = bot_response.response
+        response_text = bot_response.get("response", "I could not understand.")
 
         # 4. Generate TTS audio response using gTTS
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_out:
@@ -84,8 +84,8 @@ async def audio_chat(audio: UploadFile = File(...)):
             "X-Transcribed-Text": urllib.parse.quote(transcribed_text),
             "X-Bot-Response": urllib.parse.quote(json.dumps({
                 "text": response_text,
-                "targetAisle": bot_response.target_aisle,
-                "toolActivity": bot_response.tool_activity
+                "targetAisle": bot_response.get("target_aisle"),
+                "toolActivity": bot_response.get("tool_activity", [])
             }))
         }
         
