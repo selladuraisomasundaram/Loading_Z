@@ -24,6 +24,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
   const [inputValue, setInputValue] = useState("");
   const [liveTranscript, setLiveTranscript] = useState("");
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const recognizerRef = React.useRef<any>(null);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -43,89 +44,104 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isProcessing]);
 
-  // Speech recognition effect
+  // Clean up mic on unmount
   useEffect(() => {
-    if (!isMicActive) {
-      setLiveTranscript("");
-      return;
+    return () => {
+      if (recognizerRef.current) {
+        try { recognizerRef.current.stop(); } catch (e) {}
+      }
+    };
+  }, []);
+
+  const speakText = (text: string) => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      window.speechSynthesis.speak(utterance);
     }
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.warn("Web Speech API not supported in this browser.");
+  };
+
+  const toggleMic = () => {
+    // Stop any ongoing speech when interacting with mic
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+
+    if (isMicActive) {
       setIsMicActive(false);
-      return;
-    }
-    
-    let active = true;
-    const recognizer = new SpeechRecognition();
-    recognizer.lang = "en-US";
-    recognizer.continuous = true;
-    recognizer.interimResults = true; // Use interim results for live transcription
-    recognizer.maxAlternatives = 1;
+      setLiveTranscript("");
+      if (recognizerRef.current) {
+        try { recognizerRef.current.stop(); } catch (e) {}
+      }
+    } else {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        console.warn("Web Speech API not supported in this browser.");
+        return;
+      }
 
-    recognizer.onresult = (event: any) => {
-      if (!active) return;
-      let interim = "";
-      let finalStr = "";
-      
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          finalStr += event.results[i][0].transcript;
-        } else {
-          interim += event.results[i][0].transcript;
+      setIsMicActive(true);
+      setLiveTranscript("");
+
+      const recognizer = new SpeechRecognition();
+      recognizerRef.current = recognizer;
+      recognizer.lang = "en-US";
+      recognizer.continuous = true;
+      recognizer.interimResults = true;
+      recognizer.maxAlternatives = 1;
+
+      recognizer.onresult = (event: any) => {
+        let interim = "";
+        let finalStr = "";
+        
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalStr += event.results[i][0].transcript;
+          } else {
+            interim += event.results[i][0].transcript;
+          }
         }
-      }
-      
-      const transcriptStr = finalStr || interim;
-      setLiveTranscript(transcriptStr);
-      
-      if (finalStr.trim()) {
-        active = false;
-        setIsMicActive(false);
-        setInputValue(finalStr.trim());
-        handleSendMessage(finalStr.trim());
-      }
-    };
+        
+        const transcriptStr = finalStr || interim;
+        setLiveTranscript(transcriptStr);
+        
+        if (finalStr.trim()) {
+          try { recognizer.stop(); } catch(e) {}
+          setIsMicActive(false);
+          handleSendMessage(finalStr.trim());
+        }
+      };
 
-    recognizer.onerror = (e: any) => {
-      console.error("Speech recognition error", e.error);
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        active = false;
-        setIsMicActive(false);
-      }
-    };
-
-    recognizer.onend = () => {
-      if (active) {
-        // Restart if it ends prematurely (e.g. Chrome's silence timeout or post-permission restart)
-        try {
-          recognizer.start();
-        } catch (e) {
-          active = false;
+      recognizer.onerror = (e: any) => {
+        console.error("Speech recognition error:", e.error);
+        if (e.error !== 'no-speech') {
           setIsMicActive(false);
         }
-      }
-    };
-    
-    try {
-      recognizer.start();
-    } catch (e) {
-      console.error("Mic start error", e);
-      active = false;
-      setIsMicActive(false);
-    }
-    
-    return () => {
-      active = false;
+      };
+
+      recognizer.onend = () => {
+        setIsMicActive(false);
+      };
+
       try {
-        recognizer.stop();
-      } catch (e) {}
-    };
-  }, [isMicActive]);
+        recognizer.start();
+      } catch (e) {
+        console.error("Mic start error:", e);
+        setIsMicActive(false);
+      }
+    }
+  };
 
   const handleSendMessage = async (customText?: string) => {
     const textToSend = customText || inputValue;
     if (!textToSend.trim() || isProcessing) return;
+
+    // Stop TTS if user sends a message manually
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
 
     const userMsg: ChatMessage = {
       id: `msg-user-${Date.now()}`,
@@ -141,6 +157,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
     try {
       const botResponse = await sendChatMessage(textToSend);
       setMessages((prev) => [...prev, botResponse]);
+      
+      // Speak the bot response
+      speakText(botResponse.text);
       
       if (botResponse.targetAisle || botResponse.targetProductId) {
         setAssistantTargetProduct({
@@ -163,6 +182,12 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
         timestamp: new Date().toLocaleTimeString(),
         toolActivity: [{ step: "Network Error", action: "Failed to connect to backend", result: "Timeout" }],
       };
+      setMessages((prev) => [...prev, errorMsg]);
+      speakText(errorMsg.text);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
       setIsProcessing(false);
@@ -213,7 +238,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
 
       {/* Central Mic Button */}
       <button
-        onClick={() => setIsMicActive(!isMicActive)}
+        onClick={toggleMic}
         className={`relative w-40 h-40 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl group ${
           isMicActive
             ? "bg-rose-500 text-white animate-pulse shadow-[0_0_60px_-10px_rgba(244,63,94,0.6)] scale-110"
