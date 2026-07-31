@@ -63,6 +63,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
     }
   };
 
+  const recognitionRef = React.useRef<any>(null);
+
   const toggleMic = async () => {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
@@ -74,9 +76,30 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
         mediaRecorderRef.current.stop();
       }
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
     } else {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        // Initialize SpeechRecognition for LIVE frontend transcript feedback
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (SpeechRecognition) {
+          const recognition = new SpeechRecognition();
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.onresult = (event: any) => {
+            let currentTranscript = "";
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+              currentTranscript += event.results[i][0].transcript;
+            }
+            setLiveTranscript(currentTranscript || "Listening (recording audio)...");
+          };
+          recognition.start();
+          recognitionRef.current = recognition;
+        }
+
         const mediaRecorder = new MediaRecorder(stream);
         mediaRecorderRef.current = mediaRecorder;
         audioChunksRef.current = [];
@@ -92,9 +115,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
           handleSendAudioMessage(audioBlob);
           // Stop all tracks to release microphone
           stream.getTracks().forEach((track) => track.stop());
+          if (recognitionRef.current) recognitionRef.current.stop();
         };
 
-        mediaRecorder.start();
+        // Pass 250ms timeslice to ensure audio chunks are flushed reliably
+        mediaRecorder.start(250);
         setIsMicActive(true);
         setLiveTranscript("Listening (recording audio)...");
       } catch (err) {
