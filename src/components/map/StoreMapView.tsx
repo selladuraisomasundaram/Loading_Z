@@ -34,6 +34,13 @@ export const StoreMapView: React.FC = () => {
         const data = await res.json();
         setGemmaInsight(data.gemma_route_insight);
         setRouteData(data);
+        
+        // Auto-select the first optimized item to route to it!
+        if (data.optimized_route && data.optimized_route.length > 0) {
+          setSelectedProduct(data.optimized_route[0]);
+        } else if (items.length > 0) {
+          setSelectedProduct(items[0].product);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -49,11 +56,22 @@ export const StoreMapView: React.FC = () => {
     } else {
       setRouteData(null);
       setGemmaInsight(null);
+      setSelectedProduct(null);
     }
   }, [items]);
 
   const handleProductSelect = (product: Product | null) => {
     setSelectedProduct(product);
+  };
+  
+  const handleStartNavigation = () => {
+    if (items.length > 0 && !selectedProduct) {
+      // Pick first item if none selected
+      setSelectedProduct(routeData?.optimized_route?.[0] || items[0].product);
+    }
+    // Just simple visual feedback for the dashboard map mode
+    const navItem = selectedProduct || routeData?.optimized_route?.[0] || items[0].product;
+    alert(`Starting navigation to ${navItem.name || navItem.productName}! The trolley's A* Pathfinding and SLAM systems are actively guiding you.`);
   };
 
   return (
@@ -193,6 +211,7 @@ export const StoreMapView: React.FC = () => {
 
         {/* Action Button */}
         <button 
+          onClick={handleStartNavigation}
           disabled={items.length === 0}
           className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-extrabold text-sm rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2"
         >
