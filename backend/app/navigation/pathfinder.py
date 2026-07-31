@@ -1,6 +1,6 @@
 import networkx as nx
 import math
-from networkx.algorithms.approximation import traveling_salesperson_problem
+from networkx.algorithms.approximation import traveling_salesman_problem
 from app.core.database import SessionLocal
 from app.models.product import Product
 
@@ -51,7 +51,7 @@ for n1, n2 in edges:
 def _euclidean_distance(p1: tuple, p2: tuple) -> float:
     return math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
 
-def map_aisle_to_node(aisle_str: str) -> str:
+def map_to_spatial_node(aisle_str: str) -> str:
     """Map DB aisle string to closest NetworkX node"""
     if not aisle_str:
         return "N_UNKNOWN"
@@ -83,7 +83,7 @@ def calculate_optimal_tsp_route(cart_item_ids: list[str], start_coords: tuple = 
                 
             product = db.query(Product).filter(Product.id == sku).first()
             if product:
-                node = map_aisle_to_node(product.aisle)
+                node = map_to_spatial_node(product.aisle)
                 pt = SPATIAL_NODES[node]
                 stops_data.append({
                     "sku": sku,
@@ -126,7 +126,7 @@ def calculate_optimal_tsp_route(cart_item_ids: list[str], start_coords: tuple = 
 
     # 4. Run TSP Algorithm
     try:
-        tsp_cycle = traveling_salesperson_problem(tsp_graph, weight="weight")
+        tsp_cycle = traveling_salesman_problem(tsp_graph, weight="weight")
     except nx.NetworkXError:
         tsp_cycle = ["N_ENTRANCE", "N_CHECKOUT"]
     
@@ -194,8 +194,8 @@ def calculate_optimal_tsp_route(cart_item_ids: list[str], start_coords: tuple = 
 
 def calculate_route(start_node: str, destination_node: str) -> dict:
     """Legacy single destination routing"""
-    start_canonical = map_aisle_to_node(start_node)
-    dest_canonical = map_aisle_to_node(destination_node)
+    start_canonical = map_to_spatial_node(start_node)
+    dest_canonical = map_to_spatial_node(destination_node)
 
     try:
         path_nodes = nx.shortest_path(G, source=start_canonical, target=dest_canonical, weight="weight")

@@ -103,3 +103,32 @@ export const supermarketGraph: NavigationGraph = {
   nodes: nodeMap,
   edges,
 };
+
+import { storeAisles, storeMapConfig } from "@/components/navigation/storeMapData";
+
+/**
+ * Validates whether a coordinate (x, y) falls inside a walkable corridor or space
+ * and does not collide with store shelves or outer boundaries.
+ */
+export function isWalkablePosition(x: number, y: number, buffer: number = 4): boolean {
+  const b = storeMapConfig.boundaries;
+  // Outer boundary check
+  if (x < b.x + buffer || x > b.x + b.width - buffer || y < b.y + buffer || y > b.y + b.height - buffer) {
+    return false;
+  }
+
+  // Check collision against all 12 aisle shelf blocks
+  for (const aisle of storeAisles) {
+    const minX = aisle.x - buffer;
+    const maxX = aisle.x + aisle.width + buffer;
+    const minY = aisle.y - buffer;
+    const maxY = aisle.y + aisle.height + buffer;
+
+    if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
+      return false; // Collision with shelf/rack
+    }
+  }
+
+  return true;
+}
+

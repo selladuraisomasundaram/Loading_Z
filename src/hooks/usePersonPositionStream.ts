@@ -118,6 +118,62 @@ export function usePersonPositionStream(options: UsePersonPositionStreamOptions 
     };
   }, [isSimulating, processIncomingPosition]);
 
+  // Manual real-time movement handler (WASD / Arrow keys / D-Pad) with collision detection
+  const moveActivePerson = useCallback((dx: number, dy: number) => {
+    const pId = "PERSON-01";
+
+    setTrackedPersons((prev) => {
+      const current = prev[pId] || defaultInitialPerson;
+      let targetX = current.x + dx;
+      let targetY = current.y + dy;
+
+      let finalX = current.x;
+      let finalY = current.y;
+
+      // 1. Try full diagonal move
+      if (isWalkablePosition(targetX, targetY)) {
+        finalX = targetX;
+        finalY = targetY;
+      }
+      // 2. Wall sliding: try horizontal move only
+      else if (isWalkablePosition(targetX, current.y)) {
+        finalX = targetX;
+      }
+      // 3. Wall sliding: try vertical move only
+      else if (isWalkablePosition(current.x, targetY)) {
+        finalY = targetY;
+      }
+      // Fully blocked by shelf/wall
+      else {
+        return prev;
+      }
+
+      const nowTs = new Date().toLocaleTimeString();
+      const locInfo = getZoneAndAisleName(finalX, finalY);
+
+      const updatedHistory = [
+        ...current.history.slice(-25),
+        { x: finalX, y: finalY, timestamp: nowTs },
+      ];
+
+      return {
+        ...prev,
+        [pId]: {
+          ...current,
+          x: finalX,
+          y: finalY,
+          zoneId: locInfo.zoneId,
+          aisleId: locInfo.aisleId,
+          timestamp: nowTs,
+          status: "Tracking",
+          history: updatedHistory,
+        },
+      };
+    });
+
+    setConnectionStatus("Tracking");
+  }, []);
+
   return {
     trackedPersons,
     activePerson: trackedPersons["PERSON-01"] || defaultInitialPerson,
@@ -126,7 +182,20 @@ export function usePersonPositionStream(options: UsePersonPositionStreamOptions 
     isSimulating,
     setIsSimulating,
     processIncomingPosition,
+    moveActivePerson,
   };
+}
+
+import { isWalkablePosition } from "@/lib/navigation/navigationGraph";
+
+function getZoneAndAisleName(x: number, y: number): { zoneId: string; aisleId: string } {
+  if (y >= 480) return { zoneId: "ZONE_CHECKOUT", aisleId: "Main Concourse" };
+  if (y <= 120) return { zoneId: "ZONE_SNACKS", aisleId: "Top Concourse" };
+  if (x <= 180) return { zoneId: "ZONE_WEST", aisleId: "West Corridor" };
+  if (x >= 700) return { zoneId: "ZONE_EAST", aisleId: "East Corridor" };
+  if (y >= 320 && y <= 480) return { zoneId: "ZONE_DAIRY", aisleId: "Aisle Row C" };
+  if (y >= 170 && y <= 320) return { zoneId: "ZONE_GROCERY", aisleId: "Aisle Row B" };
+  return { zoneId: "ZONE_CENTRAL", aisleId: "Central Spine" };
 }
 
 export default usePersonPositionStream;

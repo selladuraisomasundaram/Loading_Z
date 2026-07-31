@@ -64,6 +64,7 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
     isSimulating,
     setIsSimulating,
     processIncomingPosition,
+    moveActivePerson,
   } = usePersonPositionStream({ autoSimulate: false, noiseThreshold: 5.0 });
 
   // Map Controls State
@@ -77,12 +78,61 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
   const [showShelves, setShowShelves] = useState<boolean>(true);
   const [showTrail, setShowTrail] = useState<boolean>(true);
 
+  // Synchronize external prop selected product
+  useEffect(() => {
+    if (propSelectedProduct) {
+      setSelectedProduct(propSelectedProduct);
+    }
+  }, [propSelectedProduct]);
+
   // Synchronize external backend position payload when pushed
   useEffect(() => {
     if (externalPersonPosition) {
       processIncomingPosition(externalPersonPosition);
     }
   }, [externalPersonPosition, processIncomingPosition]);
+
+  // Real-Time Keyboard Movement Listener (WASD & Arrow Keys)
+  useEffect(() => {
+    const MOVE_STEP = 6;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't capture keyboard inputs when user is typing in forms
+      if (["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName)) {
+        return;
+      }
+      let dx = 0;
+      let dy = 0;
+      switch (e.key) {
+        case "ArrowUp":
+        case "w":
+        case "W":
+          dy = -MOVE_STEP;
+          break;
+        case "ArrowDown":
+        case "s":
+        case "S":
+          dy = MOVE_STEP;
+          break;
+        case "ArrowLeft":
+        case "a":
+        case "A":
+          dx = -MOVE_STEP;
+          break;
+        case "ArrowRight":
+        case "d":
+        case "D":
+          dx = MOVE_STEP;
+          break;
+        default:
+          return;
+      }
+      e.preventDefault();
+      moveActivePerson(dx, dy);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [moveActivePerson]);
 
   // Pan / Dragging Ref State
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -859,13 +909,48 @@ export const DigitalSupermarketMap: React.FC<DigitalSupermarketMapProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 text-xs bg-white border border-emerald-200 px-4 py-2 rounded-xl">
-          <div className="text-slate-600">
-            Coordinates: <strong className="text-emerald-700 font-mono font-extrabold">({activePerson.x}, {activePerson.y})</strong>
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Movement D-Pad Controls for Touch/Mouse */}
+          <div className="flex items-center gap-1 bg-white border border-emerald-200 p-1.5 rounded-xl shadow-2xs">
+            <span className="text-[11px] font-bold text-slate-500 px-1">Controls:</span>
+            <button
+              onClick={() => moveActivePerson(0, -10)}
+              className="px-2 py-1 bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 rounded-lg text-xs font-black transition-colors"
+              title="Move Up (W / Up Arrow)"
+            >
+              ▲
+            </button>
+            <button
+              onClick={() => moveActivePerson(-10, 0)}
+              className="px-2 py-1 bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 rounded-lg text-xs font-black transition-colors"
+              title="Move Left (A / Left Arrow)"
+            >
+              ◄
+            </button>
+            <button
+              onClick={() => moveActivePerson(0, 10)}
+              className="px-2 py-1 bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 rounded-lg text-xs font-black transition-colors"
+              title="Move Down (S / Down Arrow)"
+            >
+              ▼
+            </button>
+            <button
+              onClick={() => moveActivePerson(10, 0)}
+              className="px-2 py-1 bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 rounded-lg text-xs font-black transition-colors"
+              title="Move Right (D / Right Arrow)"
+            >
+              ►
+            </button>
           </div>
-          <div className="h-4 w-px bg-slate-200" />
-          <div className="text-slate-600">
-            Last Updated: <strong className="text-slate-800 font-mono">{activePerson.timestamp}</strong>
+
+          <div className="flex flex-wrap items-center gap-3 text-xs bg-white border border-emerald-200 px-4 py-2 rounded-xl">
+            <div className="text-slate-600">
+              Coordinates: <strong className="text-emerald-700 font-mono font-extrabold">({activePerson.x}, {activePerson.y})</strong>
+            </div>
+            <div className="h-4 w-px bg-slate-200" />
+            <div className="text-slate-600">
+              Last Updated: <strong className="text-slate-800 font-mono">{activePerson.timestamp}</strong>
+            </div>
           </div>
         </div>
       </div>
