@@ -22,6 +22,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
   const [isMicActive, setIsMicActive] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const [liveTranscript, setLiveTranscript] = useState("");
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -44,7 +45,10 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
 
   // Speech recognition effect
   useEffect(() => {
-    if (!isMicActive) return;
+    if (!isMicActive) {
+      setLiveTranscript("");
+      return;
+    }
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       console.warn("Web Speech API not supported in this browser.");
@@ -56,18 +60,30 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
     const recognizer = new SpeechRecognition();
     recognizer.lang = "en-US";
     recognizer.continuous = true;
-    recognizer.interimResults = false;
+    recognizer.interimResults = true; // Use interim results for live transcription
     recognizer.maxAlternatives = 1;
 
     recognizer.onresult = (event: any) => {
       if (!active) return;
-      const lastResultIndex = event.results.length - 1;
-      const transcript = event.results[lastResultIndex][0].transcript.trim();
-      if (transcript) {
+      let interim = "";
+      let finalStr = "";
+      
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalStr += event.results[i][0].transcript;
+        } else {
+          interim += event.results[i][0].transcript;
+        }
+      }
+      
+      const transcriptStr = finalStr || interim;
+      setLiveTranscript(transcriptStr);
+      
+      if (finalStr.trim()) {
         active = false;
         setIsMicActive(false);
-        setInputValue(transcript);
-        handleSendMessage(transcript);
+        setInputValue(finalStr.trim());
+        handleSendMessage(finalStr.trim());
       }
     };
 
@@ -173,7 +189,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
          ) : isMicActive ? (
            <div className="space-y-2">
              <p className="text-rose-400 animate-pulse text-2xl font-bold">Listening...</p>
-             <p className="text-slate-400 text-sm">Speak your request clearly</p>
+             <p className="text-slate-400 text-sm">
+                {liveTranscript ? `"${liveTranscript}"` : "Speak your request clearly"}
+             </p>
            </div>
          ) : (
            <div className="space-y-2">
@@ -204,8 +222,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onSelectMessage }) => {
             : "bg-gradient-to-br from-purple-600 to-indigo-700 hover:from-purple-500 hover:to-indigo-600 text-white hover:scale-105 shadow-[0_0_40px_-10px_rgba(147,51,234,0.4)] hover:shadow-[0_0_60px_-10px_rgba(147,51,234,0.6)]"
         }`}
       >
-        <Bot className={`w-16 h-16 ${isProcessing ? "animate-bounce" : isMicActive ? "animate-ping opacity-20 absolute" : "group-hover:scale-110 transition-transform"}`} />
-        <Mic className={`w-16 h-16 absolute ${isProcessing ? "opacity-0" : "opacity-100"}`} />
+        <Bot className={`w-16 h-16 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-all duration-300 ${isProcessing ? "animate-bounce" : isMicActive ? "opacity-0 scale-50" : "opacity-100 scale-100 group-hover:scale-110"}`} />
+        <Mic className={`w-16 h-16 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-all duration-300 ${isMicActive ? "opacity-100 scale-100 animate-pulse" : "opacity-0 scale-50"}`} />
       </button>
 
       {/* Text Bubble Suggestions */}
