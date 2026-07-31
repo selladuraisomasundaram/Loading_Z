@@ -44,7 +44,7 @@ async function fetchWithTimeout(
   } catch (error: unknown) {
     clearTimeout(id);
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("Gemma AI Vision request timed out.");
+      throw new Error(`Request timed out. Local AI models (Gemma/Whisper) are taking longer than expected.`);
     }
     throw new Error("Backend unavailable. Please ensure Gemma AI backend server is running on " + BASE_URL);
   }
@@ -263,7 +263,7 @@ export async function sendAudioMessage(audioBlob: Blob): Promise<{ message: Chat
   const response = await fetchWithTimeout(`${BASE_URL}/api/v1/assistant/audio-chat`, {
     method: "POST",
     body: formData,
-  }, 120000); // 2 minute timeout for Whisper inference
+  }, 300000); // 5 minute timeout for Whisper + Gemma RAG inference
 
   if (!response.ok) {
     throw new Error(`Audio Assistant service error (HTTP ${response.status}).`);
